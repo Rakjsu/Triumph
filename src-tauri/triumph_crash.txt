@@ -1,0 +1,19 @@
+
+thread 'main' (100848) panicked at src\main.rs:177:10:
+error while running tauri application: PluginInitialization("updater", "Error deserializing 'plugins.updater' within your Tauri configuration: missing field `pubkey`")
+stack backtrace:
+   0: std::panicking::panic_handler
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf/library\std\src\panicking.rs:689
+   1: core::panicking::panic_fmt
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf/library\core\src\panicking.rs:80
+   2: core::result::unwrap_failed
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf/library\core\src\result.rs:1867
+   3: enum2$<core::result::Result<tuple$<>,enum2$<tauri::error::Error> > >::expect<tuple$<>,enum2$<tauri::error::Error> >
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\library\core\src\result.rs:1185
+   4: triumph::main
+             at .\src\main.rs:177
+   5: core::ops::function::FnOnce::call_once<void (*)(),tuple$<> >
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\library\core\src\ops\function.rs:250
+   6: core::hint::black_box
+             at /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\library\core\src\hint.rs:473
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.

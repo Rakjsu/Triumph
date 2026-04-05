@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Download } from "lucide-react";
+import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { useColor } from "color-thief-react";
-import { check } from '@tauri-apps/plugin-updater';
 
 interface SteamGame {
   appid: string;
@@ -63,31 +62,34 @@ function App() {
 
   async function checkForUpdates() {
     try {
+      // Dynamic import prevents crash if updater not configured
+      const { check } = await import('@tauri-apps/plugin-updater');
       const update = await check();
       if (update) {
         setUpdateAvailable(update);
         toast.custom((t) => (
           <div className="glass-panel" style={{padding: '15px', display: 'flex', gap: '15px', alignItems: 'center'}}>
-            <Download style={{color: 'cyan'}}/>
+            <span style={{fontSize: '20px'}}>⬆️</span>
             <div>
-               <b>New Version Available!</b>
+               <b>Nova Versão Disponível!</b>
                <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>{update.version}</div>
             </div>
             <button className="btn btn-primary" onClick={async () => {
               toast.dismiss(t.id);
-              const installToast = toast.loading("Downloading update...");
+              const installToast = toast.loading("Baixando atualização...");
               try {
                 await update.downloadAndInstall();
-                toast.success("Ready to Restart!", {id: installToast});
+                toast.success("Pronto! Reiniciando...", {id: installToast});
               } catch(e) {
-                toast.error("Failed to update.", {id: installToast});
+                toast.error("Falha ao atualizar.", {id: installToast});
               }
-            }}>Install</button>
+            }}>Instalar</button>
           </div>
         ), {duration: 10000});
       }
     } catch(e) {
-      console.log("No updates or updater error", e);
+      // Silently fail in dev mode or when GitHub release not yet published
+      console.log("Updater: no update or not configured", e);
     }
   }
 

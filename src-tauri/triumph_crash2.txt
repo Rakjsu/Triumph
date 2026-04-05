@@ -1,0 +1,4 @@
+
+thread 'main' (83624) panicked at src\main.rs:177:10:
+error while running tauri application: PluginInitialization("updater", "Error deserializing 'plugins.updater' within your Tauri configuration: missing field `pubkey`")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
