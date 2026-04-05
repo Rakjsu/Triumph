@@ -60,7 +60,7 @@ function App() {
   const appWindow = getCurrentWindow();
 
   useEffect(() => {
-    fetchGames();
+    fetchGames(true);
     checkForUpdates();
   }, []);
 
