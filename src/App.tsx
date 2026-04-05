@@ -20,6 +20,7 @@ interface Achievement {
   unlocked: boolean;
   hidden: boolean;
   icon_rgba?: number[];
+  icon_url?: string;
 }
 
 // Convert 64x64 RGBA byte array from Rust to Base64 Image
@@ -335,8 +336,12 @@ function App() {
                         style={ach.unlocked && colorData ? {borderColor: `${colorData}66`, boxShadow: `0 8px 32px ${colorData}11`} : {}}
                       >
                         <div className="status-badge" style={ach.unlocked && colorData ? {background: colorData, boxShadow: `0 0 10px ${colorData}`} : {}}></div>
-                        <div className="ach-icon" style={{padding: b64Icon ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
-                          {b64Icon ? <img src={b64Icon} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(100%) opacity(0.5)'}} /> : <Trophy size={24} />}
+                        <div className="ach-icon" style={{padding: b64Icon || ach.icon_url ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
+                          {b64Icon 
+                            ? <img src={b64Icon} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(100%) opacity(0.5)'}} /> 
+                            : ach.icon_url 
+                              ? <img src={ach.icon_url} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(100%) opacity(0.5)'}} onError={(e) => { e.currentTarget.style.display='none'; }}/>
+                              : <Trophy size={24} />}
                         </div>
                         <div className="ach-info">
                           <div className="ach-name">{ach.name}</div>

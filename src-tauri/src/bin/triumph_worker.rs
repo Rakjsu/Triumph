@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::env;
+use std::panic;
 use std::process;
 use steamworks::Client;
 use std::time::Duration;
@@ -12,6 +13,7 @@ struct AchievementResult {
     unlocked: bool,
     hidden: bool,
     icon_rgba: Option<Vec<u8>>,
+    icon_url: String,
 }
 
 fn main() {
@@ -61,7 +63,17 @@ fn main() {
                     let description = ach.get_achievement_display_attribute("desc").unwrap_or("").to_string();
                     let hidden = ach.get_achievement_display_attribute("hidden").unwrap_or("0") == "1";
                     
-                    let icon_rgba = ach.get_achievement_icon();
+                    // Safely attempt to get icon - steamworks-rs panics for non-64px icons
+                    let icon_rgba = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                        ach.get_achievement_icon()
+                    })).ok().flatten();
+
+                    // CDN fallback URL for achievement icons
+                    let icon_url = format!(
+                        "https://steamcommunity-a.akamaihd.net/economy/image/IXcxts9opTPEdpUDfVrMiWMSt{}_{}/64fx64f/",
+                        app_id_u32,
+                        name
+                    );
                     
                     achievements.push(AchievementResult {
                         id: name.clone(),
@@ -70,6 +82,7 @@ fn main() {
                         unlocked,
                         hidden,
                         icon_rgba,
+                        icon_url,
                     });
                 }
             }
