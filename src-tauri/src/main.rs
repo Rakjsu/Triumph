@@ -195,11 +195,33 @@ async fn stop_idle(pid: u32) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn kill_all_workers() -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
+    let _ = Command::new("taskkill")
+        .args(&["/IM", "triumph_worker.exe", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_games, run_worker, start_idle, stop_idle])
+        .invoke_handler(tauri::generate_handler![get_games, run_worker, start_idle, stop_idle, kill_all_workers])
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Destroyed => {
+                use std::os::windows::process::CommandExt;
+                let _ = std::process::Command::new("taskkill")
+                    .args(&["/IM", "triumph_worker.exe", "/F"])
+                    .creation_flags(0x08000000)
+                    .spawn();
+            }
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

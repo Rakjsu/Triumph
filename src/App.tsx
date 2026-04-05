@@ -60,6 +60,27 @@ function App() {
   const [idlingGames, setIdlingGames] = useState<Record<string, number>>({});
   const appWindow = getCurrentWindow();
 
+  const handleMaximize = async () => {
+    try {
+      if (await appWindow.isMaximized()) {
+        await appWindow.unmaximize();
+      } else {
+        await appWindow.maximize();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      await invoke("kill_all_workers");
+    } catch (e) { console.error(e); }
+    try {
+      await appWindow.close();
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => {
     fetchGames(true);
     checkForUpdates();
@@ -291,10 +312,10 @@ function App() {
           <button className="titlebar-button" onClick={() => appWindow.minimize()}>
             <Minus size={16} />
           </button>
-          <button className="titlebar-button" onClick={() => appWindow.toggleMaximize()}>
+          <button className="titlebar-button" onClick={handleMaximize}>
             <Square size={14} />
           </button>
-          <button className="titlebar-button close-btn" onClick={() => appWindow.close()}>
+          <button className="titlebar-button close-btn" onClick={handleClose}>
             <X size={18} />
           </button>
         </div>
