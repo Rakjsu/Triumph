@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Rakjsu/Triumph/main/src-tauri/icons/128x128.png" alt="Triumph Logo" width="128" />
+  <img src="https://raw.githubusercontent.com/Rakjsu/Triumph/main/src-tauri/icons/128x128.png" alt="Triumph Logo" width="160" />
   <h1>Triumph Nexus</h1>
   <p><b>Advanced Steam Achievement Manager & Game Analyzer</b></p>
   
