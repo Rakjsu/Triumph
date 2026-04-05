@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Minus, Square, X } from "lucide-react";
+import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Minus, Square, X, Play } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 // Color thief removed from import - using canvas-based extraction instead
 
@@ -57,6 +57,7 @@ function App() {
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [cacheBust, setCacheBust] = useState<number>(0);
   const [view, setView] = useState<'games' | 'settings'>('games');
+  const [idlingGames, setIdlingGames] = useState<Record<string, number>>({});
   const appWindow = getCurrentWindow();
 
   useEffect(() => {
@@ -165,6 +166,34 @@ function App() {
       toast.error("Failed to toggle achievement");
     }
   }
+
+  const toggleIdle = async () => {
+    if (!selectedGame) return;
+    const appIdStr = selectedGame.appid.toString();
+    
+    if (idlingGames[appIdStr]) {
+      const pid = idlingGames[appIdStr];
+      try {
+        await invoke("stop_idle", { pid });
+        setIdlingGames(prev => {
+          const next = {...prev};
+          delete next[appIdStr];
+          return next;
+        });
+        toast(`Farming interrompido: ${selectedGame.name}`);
+      } catch (e) {
+        toast.error(`Falha ao parar: ${e}`);
+      }
+    } else {
+      try {
+        const pid: number = await invoke("start_idle", { appid: appIdStr });
+        setIdlingGames(prev => ({...prev, [appIdStr]: pid}));
+        toast(`Iniciando simulação fantasma de ${selectedGame.name}! (Dropando cartas...)`);
+      } catch (e) {
+        toast.error(`Falha ao iniciar farm: ${e}`);
+      }
+    }
+  };
 
   async function unlockAll() {
     if (!selectedGame) return;
@@ -448,6 +477,14 @@ function App() {
                     </button>
                     <button className="btn btn-danger" onClick={lockAll} disabled={achievements.length === 0}>
                       <Lock size={18} /> Lock All
+                    </button>
+                    <button 
+                      className={`btn ${idlingGames[selectedGame.appid.toString()] ? 'btn-danger' : 'btn-primary'}`} 
+                      onClick={toggleIdle} 
+                      style={{background: idlingGames[selectedGame.appid.toString()] ? '' : 'transparent', border: `1px solid ${colorData || 'var(--accent-cyan)'}`, color: idlingGames[selectedGame.appid.toString()] ? '#fff' : (colorData || 'var(--accent-cyan)')}}
+                    >
+                      {idlingGames[selectedGame.appid.toString()] ? <Square size={18} /> : <Play size={18} />}
+                      {idlingGames[selectedGame.appid.toString()] ? ' Parar Farm' : ' Simular Horas'}
                     </button>
 
                     <div style={{flex: 1}}></div>

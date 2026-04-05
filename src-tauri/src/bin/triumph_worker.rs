@@ -43,6 +43,14 @@ fn main() {
     single.run_callbacks();
 
     match command.as_str() {
+        "idle" => {
+            println!("Idling started for AppID {}", app_id);
+            // We just loop forever, occasionally running callbacks so Steam knows we are alive
+            loop {
+                std::thread::sleep(Duration::from_millis(2000));
+                single.run_callbacks();
+            }
+        }
         "list" => {
             let mut achievements = Vec::new();
             let names = user_stats.get_achievement_names().unwrap_or_default();

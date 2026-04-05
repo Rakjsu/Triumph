@@ -167,12 +167,40 @@ async fn run_worker(appid: String, args: Vec<String>) -> Result<String, String> 
     }
 }
 
+#[tauri::command]
+async fn start_idle(appid: String) -> Result<u32, String> {
+    let worker = get_worker_path();
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let child = Command::new(&worker)
+        .args(&[&appid, "idle"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|e| format!("Failed to spawn idle worker: {}", e))?;
+
+    Ok(child.id())
+}
+
+#[tauri::command]
+async fn stop_idle(pid: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
+    Command::new("taskkill")
+        .args(&["/PID", &pid.to_string(), "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|e| format!("Failed to kill idle worker: {}", e))?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_games, run_worker])
+        .invoke_handler(tauri::generate_handler![get_games, run_worker, start_idle, stop_idle])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
