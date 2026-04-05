@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "triumph",
-        "width": 800,
-        "height": 600
+        "title": "Triumph Nexus",
+        "width": 1000,
+        "height": 700,
+        "decorations": false,
+        "transparent": true
       }
     ],
     "security": {

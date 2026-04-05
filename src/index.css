@@ -46,6 +46,56 @@ body {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
+.titlebar {
+  height: 38px;
+  background: rgba(10, 10, 15, 0.9);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  user-select: none;
+  z-index: 1000;
+}
+
+.titlebar-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.titlebar-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+}
+
+.titlebar-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.titlebar-button.close-btn:hover {
+  background: #ff5555;
+  color: white;
+}
+
 header {
   padding: 20px;
   display: flex;

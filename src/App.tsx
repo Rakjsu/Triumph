@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Minus, Square, X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 // Color thief removed from import - using canvas-based extraction instead
 
@@ -55,6 +56,7 @@ function App() {
   const [filter, setFilter] = useState<"all" | "unlocked" | "locked">("all");
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [cacheBust, setCacheBust] = useState<number>(0);
+  const appWindow = getCurrentWindow();
 
   useEffect(() => {
     fetchGames();
@@ -250,12 +252,30 @@ function App() {
 
   return (
     <>
+      <div data-tauri-drag-region className="titlebar">
+        <div className="titlebar-content">
+          <Trophy size={16} color="var(--accent-cyan)" />
+          Triumph Nexus
+        </div>
+        <div className="titlebar-controls">
+          <button className="titlebar-button" onClick={() => appWindow.minimize()}>
+            <Minus size={16} />
+          </button>
+          <button className="titlebar-button" onClick={() => appWindow.toggleMaximize()}>
+            <Square size={14} />
+          </button>
+          <button className="titlebar-button close-btn" onClick={() => appWindow.close()}>
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+
       <Toaster position="bottom-right" toastOptions={{style: {background: '#151b2b', color: '#fff', border: '1px solid rgba(0, 255, 255, 0.2)'}}}/>
       
-      <header style={{borderBottomColor: colorData ? colorData : 'rgba(0, 255, 255, 0.1)'}}>
-        <div className="title">
-          <Trophy size={28} color={colorData ? colorData : "var(--accent-cyan)"} style={{transition: 'color 0.5s ease'}}/>
-          Triumph <span style={{fontSize: '14px', color: 'var(--text-muted)', fontWeight: 400}}>Nexus Unlocker {updateAvailable && <span style={{color: 'cyan', fontSize: '11px', padding: '2px 6px', background: 'rgba(0,255,255,0.1)', borderRadius: '4px', marginLeft: '5px'}}>v{updateAvailable.version}</span>}</span>
+      <header style={{borderBottomColor: colorData ? colorData : 'rgba(0, 255, 255, 0.1)', paddingTop: '10px'}}>
+        <div className="title" style={{fontSize: '20px'}}>
+          <Trophy size={24} color={colorData ? colorData : "var(--accent-cyan)"} style={{transition: 'color 0.5s ease'}}/>
+          Triumph <span style={{fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400}}>Unlocker {updateAvailable && <span style={{color: 'cyan', fontSize: '11px', padding: '2px 6px', background: 'rgba(0,255,255,0.1)', borderRadius: '4px', marginLeft: '5px'}}>v{updateAvailable.version}</span>}</span>
         </div>
         <div style={{display: 'flex', gap: '15px'}}>
           <button className="btn btn-danger" onClick={() => fetchGames(true)}>
@@ -295,21 +315,29 @@ function App() {
                   onClick={() => loadAchievements(g)}
                   style={selectedGame?.appid === g.appid ? {borderColor: colorData ? colorData : '', background: colorData ? `linear-gradient(90deg, ${colorData}22 0%, transparent 100%)` : ''} : {}}
                 >
-                  <img 
-                    src={g.icon_url + (cacheBust ? `?t=${cacheBust}` : '')} 
-                    className="game-icon" 
-                    alt="" 
-                    onError={(e) => { 
-                      const fallback = g.header_url + (cacheBust ? `?t=${cacheBust}` : '');
-                      if (e.currentTarget.src !== fallback) {
-                        e.currentTarget.src = fallback; 
-                      } else {
-                        // Both failed (no images on Steam CDN), so hide the image entirely
-                        e.currentTarget.style.display = 'none';
-                      }
-                    }} 
-                  />
-                  <div style={{display: 'flex', flexDirection: 'column'}}>
+                  <div style={{position: 'relative', width: '46px', height: '22px', flexShrink: 0}}>
+                    <div className="game-icon-fallback" style={{display: 'none', position: 'absolute', top:0, left:0, width:'100%', height:'100%', background:'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))', borderRadius:'4px', alignItems:'center', justifyContent:'center', fontSize:'10px', fontWeight:'bold', color:'#000', opacity: 0.8}}>
+                      {g.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <img 
+                      src={g.icon_url + (cacheBust ? `?t=${cacheBust}` : '')} 
+                      className="game-icon" 
+                      alt="" 
+                      style={{position: 'absolute', top:0, left:0, zIndex: 1}}
+                      onError={(e) => { 
+                        const fallback = g.header_url + (cacheBust ? `?t=${cacheBust}` : '');
+                        if (e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback; 
+                        } else {
+                          // Both failed, hide image and show fallback sibling
+                          e.currentTarget.style.display = 'none';
+                          const prev = e.currentTarget.previousElementSibling as HTMLElement;
+                          if (prev) prev.style.display = 'flex';
+                        }
+                      }} 
+                    />
+                  </div>
+                  <div style={{display: 'flex', flexDirection: 'column', paddingLeft: '10px', overflow: 'hidden'}}>
                      <div className="game-name">{g.name}</div>
                      {g.playtime_hours > 0 && <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>{g.playtime_hours} Horas</div>}
                   </div>
@@ -343,18 +371,23 @@ function App() {
             <>
               <div className="dashboard-header" style={{position: 'relative', overflow: 'hidden'}}>
                 <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: colorData ? `radial-gradient(circle at right, ${colorData}44 0%, transparent 70%)` : '', zIndex: 0, transition: 'background 0.5s ease', pointerEvents: 'none'}}></div>
-                <div style={{position: 'relative', zIndex: 1, flexShrink: 0}}>
+                <div style={{position: 'relative', zIndex: 1, flexShrink: 0, width: '300px', height: '141px'}}>
+                   <div style={{display: 'none', position: 'absolute', top:0, left:0, width:'100%', height:'100%', background:'linear-gradient(135deg, #151b2b, var(--accent-purple))', borderRadius:'12px', alignItems:'center', justifyContent:'center', fontSize:'48px', fontWeight:'bold', color:'rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)'}}>
+                      {selectedGame.name.substring(0, 3).toUpperCase()}
+                   </div>
                    <img 
                      key={selectedGame.appid + cacheBust.toString()}
                      src={selectedGame.header_url + (cacheBust ? `?t=${cacheBust}` : '')} 
                      alt={selectedGame.name.toString()} 
-                     style={{display: 'block'}}
+                     style={{display: 'block', width: '100%', height: '100%', objectFit: 'cover', position: 'relative', zIndex: 1, borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)'}}
                      onError={(e) => { 
                        const fallback = selectedGame.icon_url + (cacheBust ? `?t=${cacheBust}` : '');
                        if (e.currentTarget.src !== fallback) {
                          e.currentTarget.src = fallback; 
                        } else {
                          e.currentTarget.style.display = 'none';
+                         const prev = e.currentTarget.previousElementSibling as HTMLElement;
+                         if (prev) prev.style.display = 'flex';
                        }
                      }} 
                    />
