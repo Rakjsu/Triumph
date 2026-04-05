@@ -144,6 +144,35 @@ fn main() {
                 println!("{}", r#"{"success": true}"#);
             }
         }
+        "restore" => {
+            if args.len() < 4 {
+                eprintln!("Needs backup path");
+                process::exit(1);
+            }
+            let file_path = &args[3];
+            let content = std::fs::read_to_string(file_path).unwrap_or_default();
+            
+            #[derive(serde::Deserialize)]
+            struct AchRestore { id: String, unlocked: bool }
+            
+            if let Ok(backup) = serde_json::from_str::<Vec<AchRestore>>(&content) {
+                for ach in backup {
+                    let a = user_stats.achievement(&ach.id);
+                    if ach.unlocked {
+                        let _ = a.set();
+                    } else {
+                        let _ = a.clear();
+                    }
+                }
+                if let Err(e) = user_stats.store_stats() {
+                    eprintln!("Failed: {:?}", e);
+                } else {
+                    println!("{}", r#"{"success": true}"#);
+                }
+            } else {
+                eprintln!("Parse fail");
+            }
+        }
         _ => {
             eprintln!("Unknown command: {}", command);
             process::exit(1);

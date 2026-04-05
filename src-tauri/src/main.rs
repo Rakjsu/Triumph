@@ -3,8 +3,24 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+
+fn get_app_dir() -> PathBuf {
+    let mut path = PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string()));
+    path.push("triumph");
+    let _ = fs::create_dir_all(&path);
+    path
+}
+
+fn get_vault_dir() -> PathBuf {
+    let mut path = get_app_dir();
+    path.push("vault");
+    let _ = fs::create_dir_all(&path);
+    path
+}
 
 #[derive(Serialize, Deserialize)]
 struct SteamGame {
@@ -207,11 +223,82 @@ async fn kill_all_workers() -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+struct VaultBackup {
+    id: String,
+    timestamp: String,
+    appid: String,
+}
+
+#[tauri::command]
+fn log_action(timestamp: String, action: String) -> Result<(), String> {
+    let mut log_path = get_app_dir();
+    log_path.push("shadow_log.txt");
+    let log_entry = format!("[{}] {}\n", timestamp, action);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .map_err(|e| e.to_string())?;
+    file.write_all(log_entry.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_logs() -> Result<String, String> {
+    let mut log_path = get_app_dir();
+    log_path.push("shadow_log.txt");
+    fs::read_to_string(log_path).or_else(|_| Ok("".to_string()))
+}
+
+#[tauri::command]
+fn save_vault_state(appid: String, timestamp_id: String, payload: String) -> Result<(), String> {
+    let mut file_path = get_vault_dir();
+    file_path.push(format!("{}_{}.json", appid, timestamp_id));
+    fs::write(file_path, payload).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn list_vaults(appid: String) -> Result<Vec<VaultBackup>, String> {
+    let vault_dir = get_vault_dir();
+    let mut backups = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(vault_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with(&appid) && name.ends_with(".json") {
+                    let timestamp_part = name.replace(&format!("{}_", appid), "").replace(".json", "");
+                    backups.push(VaultBackup {
+                        id: name.to_string(),
+                        timestamp: timestamp_part,
+                        appid: appid.clone(),
+                    });
+                }
+            }
+        }
+    }
+    
+    backups.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    Ok(backups)
+}
+
+#[tauri::command]
+fn get_vault_path(appid: String, timestamp_id: String) -> Result<String, String> {
+    let mut file_path = get_vault_dir();
+    file_path.push(format!("{}_{}.json", appid, timestamp_id));
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_games, run_worker, start_idle, stop_idle, kill_all_workers])
+        .invoke_handler(tauri::generate_handler![
+            get_games, run_worker, start_idle, stop_idle, kill_all_workers,
+            log_action, get_logs, save_vault_state, list_vaults, get_vault_path
+        ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Destroyed => {
                 use std::os::windows::process::CommandExt;

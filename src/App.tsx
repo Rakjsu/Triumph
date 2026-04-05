@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Minus, Square, X, Play } from "lucide-react";
+import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Minus, Square, X, Play, Terminal, Cloud, FileText } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 // Color thief removed from import - using canvas-based extraction instead
 
@@ -56,8 +56,12 @@ function App() {
   const [filter, setFilter] = useState<"all" | "unlocked" | "locked">("all");
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [cacheBust, setCacheBust] = useState<number>(0);
-  const [view, setView] = useState<'games' | 'settings'>('games');
+  const [view, setView] = useState<'games' | 'settings' | 'shadow_log'>('games');
   const [idlingGames, setIdlingGames] = useState<Record<string, number>>({});
+  
+  const [vaults, setVaults] = useState<any[]>([]);
+  const [showVault, setShowVault] = useState(false);
+  const [logsText, setLogsText] = useState<string>("");
   const appWindow = getCurrentWindow();
 
   const handleMaximize = async () => {
@@ -85,6 +89,43 @@ function App() {
     fetchGames(true);
     checkForUpdates();
   }, []);
+
+  useEffect(() => {
+    if (view === 'shadow_log') {
+      invoke("get_logs").then(res => setLogsText(res as string)).catch(console.error);
+    }
+  }, [view]);
+
+  const loadVaults = async () => {
+    if (!selectedGame) return;
+    try {
+      const res = await invoke("list_vaults", { appid: selectedGame.appid.toString() });
+      setVaults(res as any[]);
+      setShowVault(true);
+    } catch (e) { toast.error("Failed to list backups") }
+  };
+
+  const executeVaultRestore = async (timestampId: string) => {
+    if (!selectedGame) return;
+    setLoadingAch(true);
+    setShowVault(false);
+    try {
+      const filePath: string = await invoke("get_vault_path", { appid: selectedGame.appid.toString(), timestampId });
+      const result: string = await invoke("run_worker", {
+        appid: selectedGame.appid,
+        args: ["restore", filePath]
+      });
+      const parsed = JSON.parse(result);
+      if (parsed.success) {
+        toast.success("Time altered! Cloud Vault Restored.");
+        writeLog(`Restaurou o estado do jogo ${selectedGame.name} para o backup temporal de [${timestampId}]`);
+        await loadAchievements(selectedGame);
+      }
+    } catch (e) {
+      toast.error(`Restore failed: ${e}`);
+      setLoadingAch(false);
+    }
+  };
 
   async function checkForUpdates() {
     try {
@@ -166,9 +207,25 @@ function App() {
     setLoadingAch(false);
   }
 
+  const writeLog = async (action: string) => {
+    try {
+      const ts = new Date().toLocaleString()
+      await invoke("log_action", { timestamp: ts, action });
+    } catch (e) {}
+  };
+
+  const backupVault = async (app: SteamGame, currentAchs: Achievement[]) => {
+    try {
+      const timestamp = Date.now().toString();
+      const payload = JSON.stringify(currentAchs.map(a => ({ id: a.id, unlocked: a.unlocked })));
+      await invoke("save_vault_state", { appid: app.appid.toString(), timestampId: timestamp, payload });
+    } catch (e) { console.error("Vault backup failed", e); }
+  };
+
   async function toggleAchievement(achId: string, currentState: boolean) {
     if (!selectedGame) return;
     setAchievements(prev => prev.map(a => a.id === achId ? { ...a, unlocked: !currentState } : a));
+    writeLog(`${currentState ? 'Bloqueou' : 'Desbloqueou'} a conquista [${achId}] no jogo ${selectedGame.name}`);
     
     try {
       const result: string = await invoke("run_worker", {
@@ -218,6 +275,8 @@ function App() {
 
   async function unlockAll() {
     if (!selectedGame) return;
+    await backupVault(selectedGame, achievements);
+    writeLog(`Desbloqueou todas as conquistas do jogo ${selectedGame.name}`);
     setLoadingAch(true);
     try {
       const result: string = await invoke("run_worker", {
@@ -238,6 +297,8 @@ function App() {
 
   async function lockAll() {
     if (!selectedGame) return;
+    await backupVault(selectedGame, achievements);
+    writeLog(`Bloqueou todas as conquistas do jogo ${selectedGame.name}`);
     setLoadingAch(true);
     try {
       const result: string = await invoke("run_worker", {
@@ -359,7 +420,10 @@ function App() {
           <button className="btn btn-danger" onClick={() => fetchGames(true)}>
             <RefreshCw size={16} /> Rescan
           </button>
-          <button className={`btn ${view === 'settings' ? 'btn-primary' : ''}`} style={{padding: '8px', background: view === 'settings' ? 'var(--accent-cyan)' : 'transparent'}} onClick={() => setView(view === 'settings' ? 'games' : 'settings')}>
+          <button className={`btn ${view === 'shadow_log' ? 'btn-primary' : ''}`} style={{padding: '8px', background: view === 'shadow_log' ? 'var(--accent-purple)' : 'transparent'}} onClick={() => setView('shadow_log')}>
+            <Terminal size={20} color={view === 'shadow_log' ? '#fff' : 'var(--text-muted)'}/>
+          </button>
+          <button className={`btn ${view === 'settings' ? 'btn-primary' : ''}`} style={{padding: '8px', background: view === 'settings' ? 'var(--accent-cyan)' : 'transparent'}} onClick={() => setView('settings')}>
             <Settings size={20} color={view === 'settings' ? '#000' : 'var(--text-muted)'}/>
           </button>
         </div>
@@ -389,6 +453,15 @@ function App() {
                   </div>
                   <button className="btn btn-primary" onClick={checkForUpdates}>Check Now</button>
                 </div>
+              </div>
+            </div>
+          </section>
+        ) : view === 'shadow_log' ? (
+          <section className="dashboard" style={{alignItems: 'center', flex: 1}}>
+            <div style={{width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '600px'}}>
+              <h2 style={{fontSize: '28px', marginBottom: '20px', color: 'var(--accent-purple)', display: 'flex', alignItems: 'center', gap: '10px'}}><FileText size={28} /> Livro das Sombras</h2>
+              <div className="glass-panel" style={{flex: 1, padding: '20px', overflowY: 'auto', fontFamily: 'monospace', color: '#0f0', whiteSpace: 'pre-wrap', background: 'rgba(0,0,0,0.8)', border: '1px solid var(--accent-purple)'}}>
+                 {logsText ? logsText : "Nenhum registro espectral encontrado."}
               </div>
             </div>
           </section>
@@ -445,7 +518,7 @@ function App() {
                   </div>
                   <div style={{display: 'flex', flexDirection: 'column', paddingLeft: '10px', overflow: 'hidden'}}>
                      <div className="game-name">{g.name}</div>
-                     {g.playtime_hours > 0 && <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>{g.playtime_hours} Horas</div>}
+                     {g.playtime_hours > 0 && <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>{g.playtime_hours.toFixed(1)} Horas</div>}
                   </div>
                 </div>
               ))
@@ -503,7 +576,7 @@ function App() {
                     <div>
                       <h2>{selectedGame.name}</h2>
                       <div style={{color: 'var(--text-muted)', marginBottom: '10px'}}>
-                        {selectedGame.playtime_hours > 0 && <span style={{marginRight: '15px'}}>⏱️ {selectedGame.playtime_hours} Horas de Jogo</span>}
+                        {selectedGame.playtime_hours > 0 && <span style={{marginRight: '15px'}}>⏱️ {selectedGame.playtime_hours.toFixed(1)} Horas de Jogo</span>}
                         {achievements.length > 0 ? (
                           <>🏆 Unlocked {unlockedCount} / {achievements.length} Achievements</>
                         ) : (
@@ -533,6 +606,9 @@ function App() {
                     >
                       {idlingGames[selectedGame.appid.toString()] ? <Square size={18} /> : <Play size={18} />}
                       {idlingGames[selectedGame.appid.toString()] ? ' Parar Farm' : ' Simular Horas'}
+                    </button>
+                    <button className="btn" style={{border: '1px solid var(--accent-purple)', color: 'var(--accent-purple)', background: 'transparent'}} onClick={loadVaults}>
+                      <Cloud size={18} /> Vault (Undo)
                     </button>
 
                     <div style={{flex: 1}}></div>
@@ -575,6 +651,27 @@ function App() {
             </>
           )}
         </section>
+        
+        {showVault && (
+          <div style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <div className="glass-panel" style={{width: '450px', padding: '25px', border: '1px solid var(--accent-purple)', boxShadow: '0 0 40px rgba(150, 0, 255, 0.2)'}}>
+              <h3 style={{marginBottom: '15px', color: '#fff', fontSize: '20px'}}>Restaurar Ponto Temporal</h3>
+              <p style={{color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.4'}}>
+                {vaults.length > 0 ? "Selecione um backup do Vault para reverter todas as conquistas deste jogo para o exato estado anterior." : "Nenhum backup encontrado para este jogo."}
+              </p>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxHeight: '250px', overflowY: 'auto', paddingRight: '10px'}}>
+                {vaults.map((v: any) => (
+                  <button key={v.timestamp} className="btn" style={{justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', padding: '12px', border: '1px solid rgba(255,255,255,0.1)'}} onClick={() => executeVaultRestore(v.timestamp)}>
+                     <span style={{fontFamily: 'monospace', color: '#ccc'}}>{v.timestamp.replace(/_/g, ' as ').replace(/(\d{4})(\d{2})(\d{2})/, '$3/$2/$1')}</span>
+                     <span style={{color: 'var(--accent-purple)'}}>Restaurar</span>
+                  </button>
+                ))}
+              </div>
+              <button className="btn btn-danger" style={{width: '100%'}} onClick={() => setShowVault(false)}>Cancelar Operação</button>
+            </div>
+          </div>
+        )}
+
         </>
         )}
       </main>
