@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
-import { useColor } from "color-thief-react";
+// Color thief removed from import - using canvas-based extraction instead
 
 interface SteamGame {
   appid: string;
@@ -186,7 +186,40 @@ function App() {
     }
   }
 
-  const { data: colorData } = useColor(selectedGame ? selectedGame.header_url : '', 'hex', { crossOrigin: 'anonymous' });
+  const [colorData, setColorData] = useState<string | null>(null);
+
+  // Extract accent color from game header via hidden canvas (no CORS issues)
+  const extractColor = useCallback((url: string) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 50; canvas.height = 28;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, 50, 28);
+        const d = ctx.getImageData(0, 0, 50, 28).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let i = 0; i < d.length; i += 16) {
+          r += d[i]; g += d[i+1]; b += d[i+2]; count++;
+        }
+        if (count === 0) return;
+        r = Math.round(r/count); g = Math.round(g/count); b = Math.round(b/count);
+        setColorData(`rgb(${r},${g},${b})`);
+      } catch { setColorData(null); }
+    };
+    img.onerror = () => setColorData(null);
+    // Add cache-busting only for color extraction canvas, NOT for the visible img
+    img.src = url;
+  }, []);
+
+  useEffect(() => {
+    if (selectedGame) {
+      setColorData(null);
+      extractColor(selectedGame.header_url);
+    }
+  }, [selectedGame, extractColor]);
 
   const filteredGames = games.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
   const unlockedCount = achievements.filter(a => a.unlocked).length;
@@ -280,8 +313,14 @@ function App() {
             <>
               <div className="dashboard-header" style={{position: 'relative', overflow: 'hidden'}}>
                 <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: colorData ? `radial-gradient(circle at right, ${colorData}44 0%, transparent 70%)` : '', zIndex: 0, transition: 'background 0.5s ease', pointerEvents: 'none'}}></div>
-                <div style={{position: 'relative', zIndex: 1}}>
-                   <img src={selectedGame.header_url} alt={selectedGame.name.toString()} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <div style={{position: 'relative', zIndex: 1, flexShrink: 0}}>
+                   <img 
+                     key={selectedGame.appid}
+                     src={selectedGame.header_url} 
+                     alt={selectedGame.name.toString()} 
+                     style={{display: 'block'}}
+                     onError={(e) => { e.currentTarget.src = selectedGame.icon_url; }} 
+                   />
                 </div>
                 <div className="dashboard-info" style={{position: 'relative', zIndex: 1, width: '100%'}}>
                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>

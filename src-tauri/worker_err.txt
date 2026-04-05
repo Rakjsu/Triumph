@@ -1,2 +1,2 @@
    Compiling triumph v0.1.0 (C:\Users\rakjs\Documents\projects\AUTO CONQUISTA\Triumph\src-tauri)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.02s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.09s

@@ -45,35 +45,47 @@ fn main() {
     match command.as_str() {
         "list" => {
             let mut achievements = Vec::new();
-            let names = user_stats.get_achievement_names();
-            if let Some(names) = names {
-                for name in names {
-                    let ach = user_stats.achievement(&name);
-                    let unlocked = ach.get().unwrap_or(false);
-                    
-                    let mut display_name = ach.get_achievement_display_attribute("name")
-                        .unwrap_or("").to_string();
-                    if display_name.is_empty() {
-                        display_name = name.clone();
-                    }
-                    
-                    let description = ach.get_achievement_display_attribute("desc")
-                        .unwrap_or("").to_string();
-                    let hidden = ach.get_achievement_display_attribute("hidden")
-                        .unwrap_or("0") == "1";
+            let names = user_stats.get_achievement_names().unwrap_or_default();
 
-                    // Patched steamworks now supports any icon size (64, 128, 256px)
-                    let icon_rgba = ach.get_achievement_icon();
-                    
-                    achievements.push(AchievementResult {
-                        id: name.clone(),
-                        name: display_name,
-                        description,
-                        unlocked,
-                        hidden,
-                        icon_rgba,
-                    });
+            // First pass: collect all achievement metadata
+            for name in &names {
+                let ach = user_stats.achievement(name);
+                let unlocked = ach.get().unwrap_or(false);
+                let mut display_name = ach.get_achievement_display_attribute("name")
+                    .unwrap_or("").to_string();
+                if display_name.is_empty() { display_name = name.clone(); }
+                let description = ach.get_achievement_display_attribute("desc")
+                    .unwrap_or("").to_string();
+                let hidden = ach.get_achievement_display_attribute("hidden")
+                    .unwrap_or("0") == "1";
+                achievements.push(AchievementResult {
+                    id: name.clone(),
+                    name: display_name,
+                    description,
+                    unlocked,
+                    hidden,
+                    icon_rgba: None, // filled in retry loop below
+                });
+            }
+
+            // Icon retry loop: Steam may need time to download/cache icon data
+            // Run up to 5 callback passes with 300ms sleep between each
+            for _retry in 0..5 {
+                let mut all_loaded = true;
+                for (i, name) in names.iter().enumerate() {
+                    if achievements[i].icon_rgba.is_none() {
+                        let ach = user_stats.achievement(name);
+                        let icon = ach.get_achievement_icon();
+                        if icon.is_some() {
+                            achievements[i].icon_rgba = icon;
+                        } else {
+                            all_loaded = false;
+                        }
+                    }
                 }
+                if all_loaded { break; }
+                std::thread::sleep(Duration::from_millis(300));
+                single.run_callbacks();
             }
 
             let json = serde_json::to_string(&achievements).unwrap();
