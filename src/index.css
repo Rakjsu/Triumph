@@ -55,6 +55,7 @@ body {
   padding: 0 10px;
   user-select: none;
   z-index: 1000;
+  -webkit-app-region: drag;
 }
 
 .titlebar-content {
@@ -64,12 +65,14 @@ body {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
+  pointer-events: none;
 }
 
 .titlebar-controls {
   display: flex;
   align-items: center;
   gap: 4px;
+  -webkit-app-region: no-drag;
 }
 
 .titlebar-button {
@@ -211,6 +214,21 @@ header {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.dashboard::-webkit-scrollbar {
+  width: 8px;
+}
+.dashboard::-webkit-scrollbar-track {
+  background: rgba(10, 10, 15, 0.2);
+  border-left: 1px solid var(--glass-border);
+}
+.dashboard::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 204, 0.2);
+  border-radius: 4px;
+}
+.dashboard::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 204, 0.5);
 }
 
 .dashboard-header {
