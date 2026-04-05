@@ -197,7 +197,6 @@ async fn stop_idle(pid: u32) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![get_games, run_worker, start_idle, stop_idle])
