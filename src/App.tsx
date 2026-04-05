@@ -291,6 +291,33 @@ function App() {
     }
   }, [selectedGame, extractColor]);
 
+  // Real-time Visual Playtime Booster
+  useEffect(() => {
+    const activeIdlers = Object.keys(idlingGames);
+    if (activeIdlers.length === 0) return;
+
+    const intervalId = setInterval(() => {
+      const HOUR_INCREMENT = 1 / 3600; // 1 second
+      
+      setGames(currentGames => currentGames.map(game => {
+        if (idlingGames[game.appid.toString()]) {
+          return { ...game, playtime_hours: parseFloat((game.playtime_hours + HOUR_INCREMENT).toFixed(4)) };
+        }
+        return game;
+      }));
+
+      setSelectedGame(current => {
+        if (current && idlingGames[current.appid.toString()]) {
+          return { ...current, playtime_hours: parseFloat((current.playtime_hours + HOUR_INCREMENT).toFixed(4)) };
+        }
+        return current;
+      });
+
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [idlingGames]);
+
   const filteredGames = games.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
   const unlockedCount = achievements.filter(a => a.unlocked).length;
   const progressRatio = achievements.length > 0 ? (unlockedCount / achievements.length) * 100 : 0;
