@@ -32,14 +32,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "",
-      "endpoints": [
-        "https://github.com/Rakjsu/Triumph/releases/latest/download/latest.json"
-      ]
+    ],
+    "resources": {
+      "target/release/triumph_worker.exe": "triumph_worker.exe"
     }
-  }
+  },
+  "plugins": {}
 }
