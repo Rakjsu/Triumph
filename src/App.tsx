@@ -54,6 +54,7 @@ function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "unlocked" | "locked">("all");
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
+  const [cacheBust, setCacheBust] = useState<number>(0);
 
   useEffect(() => {
     fetchGames();
@@ -93,8 +94,24 @@ function App() {
     }
   }
 
-  async function fetchGames() {
+  async function fetchGames(isRescan = false) {
     setLoading(true);
+
+    if (isRescan) {
+      // Full cache wipe — reset all state
+      setSelectedGame(null);
+      setAchievements([]);
+      setColorData(null);
+      setFilter("all");
+      setErrorMsg(null);
+
+      // Bust browser image cache for Steam CDN by reloading images with a timestamp
+      // We use a global cache-bust key stored in state
+      setCacheBust(Date.now());
+
+      toast.success("Cache limpo! Buscando dados frescos...", { icon: "🔄" });
+    }
+
     try {
       const res: SteamGame[] = await invoke("get_games");
       setGames(res);
@@ -211,8 +228,8 @@ function App() {
     };
     img.onerror = () => setColorData(null);
     // Add cache-busting only for color extraction canvas, NOT for the visible img
-    img.src = url;
-  }, []);
+    img.src = url + (cacheBust ? `?t=${cacheBust}` : '');
+  }, [cacheBust]);
 
   useEffect(() => {
     if (selectedGame) {
@@ -241,7 +258,7 @@ function App() {
           Triumph <span style={{fontSize: '14px', color: 'var(--text-muted)', fontWeight: 400}}>Nexus Unlocker {updateAvailable && <span style={{color: 'cyan', fontSize: '11px', padding: '2px 6px', background: 'rgba(0,255,255,0.1)', borderRadius: '4px', marginLeft: '5px'}}>v{updateAvailable.version}</span>}</span>
         </div>
         <div style={{display: 'flex', gap: '15px'}}>
-          <button className="btn btn-danger" onClick={fetchGames}>
+          <button className="btn btn-danger" onClick={() => fetchGames(true)}>
             <RefreshCw size={16} /> Rescan
           </button>
           <button className="btn" style={{padding: '8px', background: 'transparent'}} onClick={() => toast("Settings coming soon!")}>
@@ -278,7 +295,16 @@ function App() {
                   onClick={() => loadAchievements(g)}
                   style={selectedGame?.appid === g.appid ? {borderColor: colorData ? colorData : '', background: colorData ? `linear-gradient(90deg, ${colorData}22 0%, transparent 100%)` : ''} : {}}
                 >
-                  <img src={g.icon_url} className="game-icon" alt="" onError={(e) => { e.currentTarget.setAttribute("src", g.header_url); }} />
+                  <img 
+                    src={g.icon_url + (cacheBust ? `?t=${cacheBust}` : '')} 
+                    className="game-icon" 
+                    alt="" 
+                    onError={(e) => { 
+                      if (e.currentTarget.src !== g.header_url) {
+                        e.currentTarget.src = g.header_url; 
+                      }
+                    }} 
+                  />
                   <div style={{display: 'flex', flexDirection: 'column'}}>
                      <div className="game-name">{g.name}</div>
                      {g.playtime_hours > 0 && <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>{g.playtime_hours} Horas</div>}
@@ -315,11 +341,15 @@ function App() {
                 <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: colorData ? `radial-gradient(circle at right, ${colorData}44 0%, transparent 70%)` : '', zIndex: 0, transition: 'background 0.5s ease', pointerEvents: 'none'}}></div>
                 <div style={{position: 'relative', zIndex: 1, flexShrink: 0}}>
                    <img 
-                     key={selectedGame.appid}
-                     src={selectedGame.header_url} 
+                     key={selectedGame.appid + cacheBust.toString()}
+                     src={selectedGame.header_url + (cacheBust ? `?t=${cacheBust}` : '')} 
                      alt={selectedGame.name.toString()} 
                      style={{display: 'block'}}
-                     onError={(e) => { e.currentTarget.src = selectedGame.icon_url; }} 
+                     onError={(e) => { 
+                       if (e.currentTarget.src !== selectedGame.icon_url) {
+                         e.currentTarget.src = selectedGame.icon_url; 
+                       }
+                     }} 
                    />
                 </div>
                 <div className="dashboard-info" style={{position: 'relative', zIndex: 1, width: '100%'}}>
