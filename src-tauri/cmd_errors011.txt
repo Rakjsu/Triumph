@@ -1,0 +1,8 @@
+    Checking bitflags v1.3.2
+    Checking lazy_static v1.5.0
+    Checking steamworks-sys v0.11.0
+    Checking steamworks v0.11.0
+    Checking triumph v0.1.0 (C:\Users\rakjs\Documents\projects\AUTO CONQUISTA\Triumph\src-tauri)
+src\bin\triumph_worker.rs:40:29: error[E0599]: no method named `user_stats` found for tuple `(Client, SingleClient)` in the current scope: method not found in `(Client, SingleClient)`
+src\bin\triumph_worker.rs:55:36: error[E0282]: type annotations needed: cannot infer type
+error: could not compile `triumph` (bin "triumph_worker") due to 2 previous errors

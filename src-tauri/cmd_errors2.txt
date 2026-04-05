@@ -1,0 +1,10 @@
+    Checking triumph v0.1.0 (C:\Users\rakjs\Documents\projects\AUTO CONQUISTA\Triumph\src-tauri)
+src\bin\triumph_worker.rs:42:16: error[E0599]: no method named `request_current_stats` found for struct `UserStats` in the current scope
+src\bin\triumph_worker.rs:50:55: error[E0308]: mismatched types: expected `&str`, found `&Vec<String>`
+src\bin\triumph_worker.rs:52:51: error[E0599]: no method named `get_achievement_display_attribute` found for struct `UserStats` in the current scope
+src\bin\triumph_worker.rs:55:36: error[E0308]: mismatched types: expected `String`, found `Vec<String>`
+src\bin\triumph_worker.rs:58:43: error[E0599]: no method named `get_achievement_display_attribute` found for struct `UserStats` in the current scope
+src\bin\triumph_worker.rs:61:45: error[E0599]: no method named `get_achievement_display_attribute` found for struct `UserStats` in the current scope
+src\bin\triumph_worker.rs:65:25: error[E0308]: mismatched types: expected `String`, found `Vec<String>`
+src\bin\triumph_worker.rs:104:50: error[E0308]: mismatched types: expected `&str`, found `&Vec<String>`
+error: could not compile `triumph` (bin "triumph_worker") due to 8 previous errors
