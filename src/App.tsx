@@ -19,11 +19,30 @@ interface Achievement {
   description: string;
   unlocked: boolean;
   hidden: boolean;
-  icon_url: string;
-  icon_locked_url: string;
+  icon_rgba?: number[];
 }
 
-
+// Convert RGBA byte array from Rust to Base64 Image (supports any size: 64, 128, 256px)
+function rgbaToBase64(rgbaBuffer: number[]): string {
+  try {
+    // Determine size from buffer length: size = sqrt(len / 4)
+    const pixelCount = rgbaBuffer.length / 4;
+    const size = Math.round(Math.sqrt(pixelCount));
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    const imgData = ctx.createImageData(size, size);
+    for (let i = 0; i < rgbaBuffer.length; i++) {
+      imgData.data[i] = rgbaBuffer[i];
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch (e) {
+    return "";
+  }
+}
 
 function App() {
   const [games, setGames] = useState<SteamGame[]>([]);
@@ -307,7 +326,7 @@ function App() {
               <div className="achievements-scroll" style={{flex: 1, overflowY: 'auto', paddingRight: '10px'}}>
                 <div className="achievements-grid">
                   {displayAchievements.map((ach) => {
-                     const iconSrc = ach.unlocked ? ach.icon_url : ach.icon_locked_url;
+                     const b64Icon = ach.icon_rgba ? rgbaToBase64(ach.icon_rgba) : null;
                      return (
                       <div 
                         key={ach.id} 
@@ -316,9 +335,9 @@ function App() {
                         style={ach.unlocked && colorData ? {borderColor: `${colorData}66`, boxShadow: `0 8px 32px ${colorData}11`} : {}}
                       >
                         <div className="status-badge" style={ach.unlocked && colorData ? {background: colorData, boxShadow: `0 0 10px ${colorData}`} : {}}></div>
-                        <div className="ach-icon" style={{padding: iconSrc ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
-                          {iconSrc 
-                            ? <img src={iconSrc} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(80%) opacity(0.6)'}} onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+                        <div className="ach-icon" style={{padding: b64Icon ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
+                          {b64Icon 
+                            ? <img src={b64Icon} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(80%) opacity(0.6)'}}/>
                             : <Trophy size={24} />}
                         </div>
                         <div className="ach-info">
