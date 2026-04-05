@@ -19,31 +19,11 @@ interface Achievement {
   description: string;
   unlocked: boolean;
   hidden: boolean;
-  icon_rgba?: number[];
-  icon_url?: string;
+  icon_url: string;
+  icon_locked_url: string;
 }
 
-// Convert 64x64 RGBA byte array from Rust to Base64 Image
-function rgbaToBase64(rgbaBuffer: number[]): string {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return "";
-    
-    // Create ImageData from buffer
-    const imgData = ctx.createImageData(64, 64);
-    for (let i = 0; i < rgbaBuffer.length; i++) {
-        imgData.data[i] = rgbaBuffer[i];
-    }
-    
-    ctx.putImageData(imgData, 0, 0);
-    return canvas.toDataURL("image/png");
-  } catch (e) {
-    return "";
-  }
-}
+
 
 function App() {
   const [games, setGames] = useState<SteamGame[]>([]);
@@ -327,7 +307,7 @@ function App() {
               <div className="achievements-scroll" style={{flex: 1, overflowY: 'auto', paddingRight: '10px'}}>
                 <div className="achievements-grid">
                   {displayAchievements.map((ach) => {
-                     const b64Icon = ach.icon_rgba ? rgbaToBase64(ach.icon_rgba) : null;
+                     const iconSrc = ach.unlocked ? ach.icon_url : ach.icon_locked_url;
                      return (
                       <div 
                         key={ach.id} 
@@ -336,12 +316,10 @@ function App() {
                         style={ach.unlocked && colorData ? {borderColor: `${colorData}66`, boxShadow: `0 8px 32px ${colorData}11`} : {}}
                       >
                         <div className="status-badge" style={ach.unlocked && colorData ? {background: colorData, boxShadow: `0 0 10px ${colorData}`} : {}}></div>
-                        <div className="ach-icon" style={{padding: b64Icon || ach.icon_url ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
-                          {b64Icon 
-                            ? <img src={b64Icon} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(100%) opacity(0.5)'}} /> 
-                            : ach.icon_url 
-                              ? <img src={ach.icon_url} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(100%) opacity(0.5)'}} onError={(e) => { e.currentTarget.style.display='none'; }}/>
-                              : <Trophy size={24} />}
+                        <div className="ach-icon" style={{padding: iconSrc ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
+                          {iconSrc 
+                            ? <img src={iconSrc} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(80%) opacity(0.6)'}} onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+                            : <Trophy size={24} />}
                         </div>
                         <div className="ach-info">
                           <div className="ach-name">{ach.name}</div>

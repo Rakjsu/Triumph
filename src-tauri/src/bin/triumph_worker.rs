@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::env;
-use std::panic;
+use std::collections::HashMap;
 use std::process;
 use steamworks::Client;
 use std::time::Duration;
@@ -12,8 +12,62 @@ struct AchievementResult {
     description: String,
     unlocked: bool,
     hidden: bool,
-    icon_rgba: Option<Vec<u8>>,
     icon_url: String,
+    icon_locked_url: String,
+}
+
+// Steam Web API schema response types
+#[derive(Deserialize)]
+struct SchemaResponse {
+    game: Option<SchemaGame>,
+}
+
+#[derive(Deserialize)]
+struct SchemaGame {
+    #[serde(rename = "availableGameStats")]
+    available_game_stats: Option<SchemaStats>,
+}
+
+#[derive(Deserialize)]
+struct SchemaStats {
+    achievements: Option<Vec<SchemaAchievement>>,
+}
+
+#[derive(Deserialize)]
+struct SchemaAchievement {
+    name: String,
+    icon: Option<String>,
+    #[serde(rename = "icongray")]
+    icon_gray: Option<String>,
+}
+
+fn fetch_achievement_icons(appid: u32) -> HashMap<String, (String, String)> {
+    let url = format!(
+        "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid={}",
+        appid
+    );
+
+    let mut map = HashMap::new();
+
+    if let Ok(mut response) = ureq::get(&url).call() {
+        if let Ok(text) = response.body_mut().read_to_string() {
+            if let Ok(schema) = serde_json::from_str::<SchemaResponse>(&text) {
+                if let Some(game) = schema.game {
+                    if let Some(stats) = game.available_game_stats {
+                        if let Some(achievements) = stats.achievements {
+                            for ach in achievements {
+                                let icon = ach.icon.unwrap_or_default();
+                                let icon_gray = ach.icon_gray.unwrap_or_default();
+                                map.insert(ach.name, (icon, icon_gray));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    map
 }
 
 fn main() {
@@ -28,8 +82,6 @@ fn main() {
 
     env::set_var("SteamAppId", app_id);
 
-    // Some versions of steamworks-rs require App ID specifically if not using SteamAppId env var
-    // We'll use init_app directly just in case it works better.
     let app_id_u32 = app_id.parse::<u32>().unwrap_or(480);
     
     let (client, single) = match Client::init_app(app_id_u32) {
@@ -48,6 +100,9 @@ fn main() {
 
     match command.as_str() {
         "list" => {
+            // Fetch icon URLs from Steam Web API (no API key needed for public games)
+            let icon_map = fetch_achievement_icons(app_id_u32);
+
             let mut achievements = Vec::new();
             let names = user_stats.get_achievement_names();
             if let Some(names) = names {
@@ -62,18 +117,11 @@ fn main() {
                     
                     let description = ach.get_achievement_display_attribute("desc").unwrap_or("").to_string();
                     let hidden = ach.get_achievement_display_attribute("hidden").unwrap_or("0") == "1";
-                    
-                    // Safely attempt to get icon - steamworks-rs panics for non-64px icons
-                    let icon_rgba = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                        ach.get_achievement_icon()
-                    })).ok().flatten();
 
-                    // CDN fallback URL for achievement icons
-                    let icon_url = format!(
-                        "https://steamcommunity-a.akamaihd.net/economy/image/IXcxts9opTPEdpUDfVrMiWMSt{}_{}/64fx64f/",
-                        app_id_u32,
-                        name
-                    );
+                    // Get icon URLs from prefetched schema map
+                    let (icon_url, icon_locked_url) = icon_map.get(&name)
+                        .cloned()
+                        .unwrap_or_default();
                     
                     achievements.push(AchievementResult {
                         id: name.clone(),
@@ -81,8 +129,8 @@ fn main() {
                         description,
                         unlocked,
                         hidden,
-                        icon_rgba,
                         icon_url,
+                        icon_locked_url,
                     });
                 }
             }
@@ -111,7 +159,7 @@ fn main() {
                 if let Err(e) = user_stats.store_stats() {
                     eprintln!("Failed to store stats: {:?}", e);
                 } else {
-                    println!("{{\"success\": true}}");
+                println!("{{\"success\": true}}");
                 }
             }
         }
@@ -126,7 +174,7 @@ fn main() {
             if let Err(e) = user_stats.store_stats() {
                 eprintln!("Failed to store stats: {:?}", e);
             } else {
-                println!("{{\"success\": true}}");
+                println!("{}", r#"{"success": true}"#);
             }
         }
         "lock_all" => {
@@ -140,7 +188,7 @@ fn main() {
             if let Err(e) = user_stats.store_stats() {
                 eprintln!("Failed to store stats: {:?}", e);
             } else {
-                println!("{{\"success\": true}}");
+                println!("{}", r#"{"success": true}"#);
             }
         }
         _ => {
