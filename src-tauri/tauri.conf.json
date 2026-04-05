@@ -34,7 +34,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "target/release/triumph_worker.exe": "triumph_worker.exe"
+      "target/release/triumph_worker.exe": "triumph_worker.exe",
+      "steam_api64.dll": "steam_api64.dll"
     }
   },
   "plugins": {}
