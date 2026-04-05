@@ -300,8 +300,12 @@ function App() {
                     className="game-icon" 
                     alt="" 
                     onError={(e) => { 
-                      if (e.currentTarget.src !== g.header_url) {
-                        e.currentTarget.src = g.header_url; 
+                      const fallback = g.header_url + (cacheBust ? `?t=${cacheBust}` : '');
+                      if (e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback; 
+                      } else {
+                        // Both failed (no images on Steam CDN), so hide the image entirely
+                        e.currentTarget.style.display = 'none';
                       }
                     }} 
                   />
@@ -346,8 +350,11 @@ function App() {
                      alt={selectedGame.name.toString()} 
                      style={{display: 'block'}}
                      onError={(e) => { 
-                       if (e.currentTarget.src !== selectedGame.icon_url) {
-                         e.currentTarget.src = selectedGame.icon_url; 
+                       const fallback = selectedGame.icon_url + (cacheBust ? `?t=${cacheBust}` : '');
+                       if (e.currentTarget.src !== fallback) {
+                         e.currentTarget.src = fallback; 
+                       } else {
+                         e.currentTarget.style.display = 'none';
                        }
                      }} 
                    />
