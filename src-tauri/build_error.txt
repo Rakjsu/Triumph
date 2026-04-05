@@ -1,0 +1,13 @@
+   Compiling triumph v0.1.0 (C:\Users\rakjs\Documents\projects\AUTO CONQUISTA\Triumph\src-tauri)
+error: unexpected closing delimiter: `}`
+  --> src\main.rs:32:5
+   |
+19 | fn get_steam_path() -> Option<PathBuf> {
+   |                                        - this delimiter might not be properly closed...
+...
+31 |         }
+   |         - ...as it matches this but it has different indentation
+32 |     }
+   |     ^ unexpected closing delimiter
+
+error: could not compile `triumph` (bin "triumph") due to 1 previous error

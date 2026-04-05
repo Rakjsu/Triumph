@@ -11,6 +11,7 @@ struct AchievementResult {
     description: String,
     unlocked: bool,
     hidden: bool,
+    icon_rgba: Option<Vec<u8>>,
 }
 
 fn main() {
@@ -60,12 +61,15 @@ fn main() {
                     let description = ach.get_achievement_display_attribute("desc").unwrap_or("").to_string();
                     let hidden = ach.get_achievement_display_attribute("hidden").unwrap_or("0") == "1";
                     
+                    let icon_rgba = ach.get_achievement_icon();
+                    
                     achievements.push(AchievementResult {
                         id: name.clone(),
                         name: display_name,
                         description,
                         unlocked,
                         hidden,
+                        icon_rgba,
                     });
                 }
             }
@@ -104,6 +108,20 @@ fn main() {
                 for name in names {
                     let ach = user_stats.achievement(&name);
                     let _ = ach.set();
+                }
+            }
+            if let Err(e) = user_stats.store_stats() {
+                eprintln!("Failed to store stats: {:?}", e);
+            } else {
+                println!("{{\"success\": true}}");
+            }
+        }
+        "lock_all" => {
+            let names = user_stats.get_achievement_names();
+            if let Some(names) = names {
+                for name in names {
+                    let ach = user_stats.achievement(&name);
+                    let _ = ach.clear();
                 }
             }
             if let Err(e) = user_stats.store_stats() {

@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Serialize, Deserialize)]
@@ -13,6 +13,7 @@ struct SteamGame {
     install_dir: String,
     icon_url: String,
     header_url: String,
+    playtime_hours: f64,
 }
 
 fn get_steam_path() -> Option<PathBuf> {
@@ -27,7 +28,36 @@ fn get_steam_path() -> Option<PathBuf> {
             }
         }
     }
+
     None
+}
+
+fn get_active_user_id() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(steam_key) = hkcu.open_subkey(r"Software\Valve\Steam\ActiveProcess") {
+            if let Ok(active_user) = steam_key.get_value::<u32, _>("ActiveUser") {
+                if active_user > 0 {
+                    return Some(active_user.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn get_localconfig_path() -> Option<PathBuf> {
+    let steam_path = get_steam_path()?;
+    let user_id = get_active_user_id()?;
+    let config_path = steam_path.join("userdata").join(user_id).join("config").join("localconfig.vdf");
+    if config_path.exists() {
+        Some(config_path)
+    } else {
+        None
+    }
 }
 
 // Simple parser for VDF key-value pairs
@@ -71,6 +101,7 @@ fn get_games() -> Vec<SteamGame> {
                                         install_dir,
                                         icon_url: format!("https://steamcdn-a.akamaihd.net/steam/apps/{}/capsule_231x87.jpg", appid),
                                         header_url: format!("https://steamcdn-a.akamaihd.net/steam/apps/{}/header.jpg", appid),
+                                        playtime_hours: 0.0,
                                     });
                                 }
                             }
@@ -81,6 +112,26 @@ fn get_games() -> Vec<SteamGame> {
         }
     }
     
+    // Parse Playtime from localconfig.vdf
+    if let Some(config_path) = get_localconfig_path() {
+        if let Ok(config_content) = fs::read_to_string(config_path) {
+            for game in &mut games {
+                // Regex pattern to find the Playtime for this specific appid
+                // Pattern matches: "appid" \n { ... "Playtime" "minutes" ... }
+                let pattern = format!(r#""{}"\s*\{{[^}}]*?"Playtime"\s*"(\d+)""#, regex::escape(&game.appid));
+                if let Ok(re) = regex::Regex::new(&pattern) {
+                    if let Some(caps) = re.captures(&config_content) {
+                        if let Some(minutes_match) = caps.get(1) {
+                            if let Ok(minutes) = minutes_match.as_str().parse::<f64>() {
+                                game.playtime_hours = f64::trunc((minutes / 60.0) * 10.0) / 10.0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Sort games alphabetically
     games.sort_by(|a, b| a.name.cmp(&b.name));
     games
@@ -118,6 +169,7 @@ async fn run_worker(appid: String, args: Vec<String>) -> Result<String, String> 
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![get_games, run_worker])

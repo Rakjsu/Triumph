@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, Trophy, Unlock, ServerCrash, RefreshCw } from "lucide-react";
+import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Download } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
+import { useColor } from "color-thief-react";
+import { check } from '@tauri-apps/plugin-updater';
 
 interface SteamGame {
   appid: string;
@@ -8,6 +11,7 @@ interface SteamGame {
   install_dir: string;
   icon_url: string;
   header_url: string;
+  playtime_hours: number;
 }
 
 interface Achievement {
@@ -16,6 +20,29 @@ interface Achievement {
   description: string;
   unlocked: boolean;
   hidden: boolean;
+  icon_rgba?: number[];
+}
+
+// Convert 64x64 RGBA byte array from Rust to Base64 Image
+function rgbaToBase64(rgbaBuffer: number[]): string {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    
+    // Create ImageData from buffer
+    const imgData = ctx.createImageData(64, 64);
+    for (let i = 0; i < rgbaBuffer.length; i++) {
+        imgData.data[i] = rgbaBuffer[i];
+    }
+    
+    ctx.putImageData(imgData, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch (e) {
+    return "";
+  }
 }
 
 function App() {
@@ -26,10 +53,43 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [loadingAch, setLoadingAch] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "unlocked" | "locked">("all");
+  const [updateAvailable, setUpdateAvailable] = useState<any>(null);
 
   useEffect(() => {
     fetchGames();
+    checkForUpdates();
   }, []);
+
+  async function checkForUpdates() {
+    try {
+      const update = await check();
+      if (update) {
+        setUpdateAvailable(update);
+        toast.custom((t) => (
+          <div className="glass-panel" style={{padding: '15px', display: 'flex', gap: '15px', alignItems: 'center'}}>
+            <Download style={{color: 'cyan'}}/>
+            <div>
+               <b>New Version Available!</b>
+               <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>{update.version}</div>
+            </div>
+            <button className="btn btn-primary" onClick={async () => {
+              toast.dismiss(t.id);
+              const installToast = toast.loading("Downloading update...");
+              try {
+                await update.downloadAndInstall();
+                toast.success("Ready to Restart!", {id: installToast});
+              } catch(e) {
+                toast.error("Failed to update.", {id: installToast});
+              }
+            }}>Install</button>
+          </div>
+        ), {duration: 10000});
+      }
+    } catch(e) {
+      console.log("No updates or updater error", e);
+    }
+  }
 
   async function fetchGames() {
     setLoading(true);
@@ -47,6 +107,7 @@ function App() {
     setSelectedGame(game);
     setLoadingAch(true);
     setErrorMsg(null);
+    setFilter("all");
     try {
       const result: string = await invoke("run_worker", { 
         appid: game.appid, 
@@ -63,8 +124,6 @@ function App() {
 
   async function toggleAchievement(achId: string, currentState: boolean) {
     if (!selectedGame) return;
-    
-    // Optimistic update
     setAchievements(prev => prev.map(a => a.id === achId ? { ...a, unlocked: !currentState } : a));
     
     try {
@@ -77,11 +136,11 @@ function App() {
       if (!parsed.success) {
         throw new Error("Steamworks returned failure");
       }
+      toast.success(currentState ? "Achievement Locked" : "Achievement Unlocked!");
     } catch (e) {
       console.error(e);
-      // Revert optimism
       setAchievements(prev => prev.map(a => a.id === achId ? { ...a, unlocked: currentState } : a));
-      setErrorMsg(`Failed to toggle achievement: ${e}`);
+      toast.error("Failed to toggle achievement");
     }
   }
 
@@ -93,33 +152,65 @@ function App() {
         appid: selectedGame.appid,
         args: ["unlock_all"]
       });
-      
       const parsed = JSON.parse(result);
       if (parsed.success) {
-        // Refresh achievements to show state
+        toast.success("Successfully unlocked all!");
         await loadAchievements(selectedGame);
       }
     } catch (e) {
       console.error(e);
-      setErrorMsg(`Failed to unlock all: ${e}`);
+      toast.error(`Failed to unlock all: ${e}`);
       setLoadingAch(false);
     }
   }
 
-  const filteredGames = games.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
+  async function lockAll() {
+    if (!selectedGame) return;
+    setLoadingAch(true);
+    try {
+      const result: string = await invoke("run_worker", {
+        appid: selectedGame.appid,
+        args: ["lock_all"]
+      });
+      const parsed = JSON.parse(result);
+      if (parsed.success) {
+        toast.success("Successfully locked all!");
+        await loadAchievements(selectedGame);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(`Failed to lock all: ${e}`);
+      setLoadingAch(false);
+    }
+  }
 
+  const { data: colorData } = useColor(selectedGame ? selectedGame.header_url : '', 'hex', { crossOrigin: 'anonymous' });
+
+  const filteredGames = games.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
   const unlockedCount = achievements.filter(a => a.unlocked).length;
+  const progressRatio = achievements.length > 0 ? (unlockedCount / achievements.length) * 100 : 0;
+
+  const displayAchievements = achievements.filter(a => {
+    if (filter === "unlocked") return a.unlocked;
+    if (filter === "locked") return !a.unlocked;
+    return true;
+  });
 
   return (
     <>
-      <header>
+      <Toaster position="bottom-right" toastOptions={{style: {background: '#151b2b', color: '#fff', border: '1px solid rgba(0, 255, 255, 0.2)'}}}/>
+      
+      <header style={{borderBottomColor: colorData ? colorData : 'rgba(0, 255, 255, 0.1)'}}>
         <div className="title">
-          <Trophy size={28} color="var(--accent-cyan)" />
-          Triumph <span style={{fontSize: '14px', color: 'var(--text-muted)', fontWeight: 400}}>Nexus Unlocker</span>
+          <Trophy size={28} color={colorData ? colorData : "var(--accent-cyan)"} style={{transition: 'color 0.5s ease'}}/>
+          Triumph <span style={{fontSize: '14px', color: 'var(--text-muted)', fontWeight: 400}}>Nexus Unlocker {updateAvailable && <span style={{color: 'cyan', fontSize: '11px', padding: '2px 6px', background: 'rgba(0,255,255,0.1)', borderRadius: '4px', marginLeft: '5px'}}>v{updateAvailable.version}</span>}</span>
         </div>
         <div style={{display: 'flex', gap: '15px'}}>
           <button className="btn btn-danger" onClick={fetchGames}>
             <RefreshCw size={16} /> Rescan
+          </button>
+          <button className="btn" style={{padding: '8px', background: 'transparent'}} onClick={() => toast("Settings coming soon!")}>
+            <Settings size={20} color="var(--text-muted)"/>
           </button>
         </div>
       </header>
@@ -150,9 +241,13 @@ function App() {
                   key={g.appid.toString()} 
                   className={`game-item ${selectedGame?.appid === g.appid ? 'active' : ''}`}
                   onClick={() => loadAchievements(g)}
+                  style={selectedGame?.appid === g.appid ? {borderColor: colorData ? colorData : '', background: colorData ? `linear-gradient(90deg, ${colorData}22 0%, transparent 100%)` : ''} : {}}
                 >
-                  <img src={g.icon_url} className="game-icon" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                  <div className="game-name">{g.name}</div>
+                  <img src={g.icon_url} className="game-icon" alt="" onError={(e) => { e.currentTarget.setAttribute("src", g.header_url); }} />
+                  <div style={{display: 'flex', flexDirection: 'column'}}>
+                     <div className="game-name">{g.name}</div>
+                     {g.playtime_hours > 0 && <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>{g.playtime_hours} Horas</div>}
+                  </div>
                 </div>
               ))
             )}
@@ -169,7 +264,7 @@ function App() {
 
           {loadingAch && (
             <div className="loading-overlay glass-panel" style={{position: 'absolute', zIndex: 50}}>
-              <div className="spinner"></div>
+              <div className="spinner" style={{borderColor: colorData ? `${colorData} transparent transparent transparent` : ''}}></div>
               <div>Bypassing Mainframe...</div>
             </div>
           )}
@@ -181,45 +276,73 @@ function App() {
             </div>
           ) : selectedGame && (
             <>
-              <div className="dashboard-header">
-                <div>
+              <div className="dashboard-header" style={{position: 'relative', overflow: 'hidden'}}>
+                <div style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: colorData ? `radial-gradient(circle at right, ${colorData}44 0%, transparent 70%)` : '', zIndex: 0, transition: 'background 0.5s ease', pointerEvents: 'none'}}></div>
+                <div style={{position: 'relative', zIndex: 1}}>
                    <img src={selectedGame.header_url} alt={selectedGame.name.toString()} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 </div>
-                <div className="dashboard-info">
-                  <h2>{selectedGame.name}</h2>
-                  <div style={{color: 'var(--text-muted)', marginBottom: '10px'}}>
-                    {achievements.length > 0 ? (
-                      <>Unlocked {unlockedCount} / {achievements.length} Achievements</>
-                    ) : (
-                      <>No Achievements Found to Unlock</>
-                    )}
+                <div className="dashboard-info" style={{position: 'relative', zIndex: 1, width: '100%'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                    <div>
+                      <h2>{selectedGame.name}</h2>
+                      <div style={{color: 'var(--text-muted)', marginBottom: '10px'}}>
+                        {selectedGame.playtime_hours > 0 && <span style={{marginRight: '15px'}}>⏱️ {selectedGame.playtime_hours} Horas de Jogo</span>}
+                        {achievements.length > 0 ? (
+                          <>🏆 Unlocked {unlockedCount} / {achievements.length} Achievements</>
+                        ) : (
+                          <>No Achievements Found to Unlock</>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{display: 'flex', gap: '10px'}}>
-                    <button className="btn btn-primary" onClick={unlockAll} disabled={achievements.length === 0}>
+                  
+                  {achievements.length > 0 && (
+                    <div style={{width: '100%', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', marginBottom: '15px', overflow: 'hidden'}}>
+                       <div style={{height: '100%', width: `${progressRatio}%`, background: colorData ? colorData : 'var(--accent-cyan)', transition: 'width 0.5s ease', boxShadow: `0 0 10px ${colorData ? colorData : 'var(--accent-cyan)'}`}}></div>
+                    </div>
+                  )}
+
+                  <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+                    <button className="btn btn-primary" onClick={unlockAll} disabled={achievements.length === 0} style={{background: colorData ? colorData : ''}}>
                       <Unlock size={18} /> Unlock All
                     </button>
+                    <button className="btn btn-danger" onClick={lockAll} disabled={achievements.length === 0}>
+                      <Lock size={18} /> Lock All
+                    </button>
+
+                    <div style={{flex: 1}}></div>
+
+                    <div style={{display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '3px'}}>
+                       <button className={`btn ${filter === 'all' ? 'btn-primary' : ''}`} style={filter !== 'all' ? {background: 'transparent'} : {}} onClick={() => setFilter('all')}>All</button>
+                       <button className={`btn ${filter === 'unlocked' ? 'btn-primary' : ''}`} style={filter !== 'unlocked' ? {background: 'transparent'} : {}} onClick={() => setFilter('unlocked')}>Unlocked</button>
+                       <button className={`btn ${filter === 'locked' ? 'btn-primary' : ''}`} style={filter !== 'locked' ? {background: 'transparent'} : {}} onClick={() => setFilter('locked')}>Locked</button>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="achievements-scroll" style={{flex: 1, overflowY: 'auto', paddingRight: '10px'}}>
                 <div className="achievements-grid">
-                  {achievements.map(ach => (
-                    <div 
-                      key={ach.id} 
-                      className={`glass-panel achievement-card ${ach.unlocked ? 'unlocked' : ''}`}
-                      onClick={() => toggleAchievement(ach.id, ach.unlocked)}
-                    >
-                      <div className="status-badge"></div>
-                      <div className="ach-icon">
-                        <Trophy size={24} />
+                  {displayAchievements.map((ach) => {
+                     const b64Icon = ach.icon_rgba ? rgbaToBase64(ach.icon_rgba) : null;
+                     return (
+                      <div 
+                        key={ach.id} 
+                        className={`glass-panel achievement-card ${ach.unlocked ? 'unlocked' : ''}`}
+                        onClick={() => toggleAchievement(ach.id, ach.unlocked)}
+                        style={ach.unlocked && colorData ? {borderColor: `${colorData}66`, boxShadow: `0 8px 32px ${colorData}11`} : {}}
+                      >
+                        <div className="status-badge" style={ach.unlocked && colorData ? {background: colorData, boxShadow: `0 0 10px ${colorData}`} : {}}></div>
+                        <div className="ach-icon" style={{padding: b64Icon ? 0 : '10px', overflow: 'hidden', background: ach.unlocked ? (colorData ? `${colorData}33` : 'rgba(0,255,255,0.1)') : 'rgba(255,255,255,0.05)'}}>
+                          {b64Icon ? <img src={b64Icon} style={{width: '100%', height: '100%', objectFit: 'cover', filter: ach.unlocked ? 'none' : 'grayscale(100%) opacity(0.5)'}} /> : <Trophy size={24} />}
+                        </div>
+                        <div className="ach-info">
+                          <div className="ach-name">{ach.name}</div>
+                          <div className="ach-desc">{ach.description || (ach.hidden ? 'Hidden Achievement' : '')}</div>
+                        </div>
                       </div>
-                      <div className="ach-info">
-                        <div className="ach-name">{ach.name}</div>
-                        <div className="ach-desc">{ach.description || (ach.hidden ? 'Hidden Achievement' : '')}</div>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </>
