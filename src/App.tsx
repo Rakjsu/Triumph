@@ -56,6 +56,7 @@ function App() {
   const [filter, setFilter] = useState<"all" | "unlocked" | "locked">("all");
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [cacheBust, setCacheBust] = useState<number>(0);
+  const [view, setView] = useState<'games' | 'settings'>('games');
   const appWindow = getCurrentWindow();
 
   useEffect(() => {
@@ -252,12 +253,12 @@ function App() {
 
   return (
     <>
-      <div data-tauri-drag-region className="titlebar">
-        <div className="titlebar-content">
-          <Trophy size={16} color="var(--accent-cyan)" />
-          Triumph Nexus
+      <div className="titlebar">
+        <div className="titlebar-content" data-tauri-drag-region style={{flex: 1, pointerEvents: 'auto', height: '100%', cursor: 'default'}}>
+          <Trophy size={16} color="var(--accent-cyan)" style={{pointerEvents: 'none'}} />
+          <span style={{pointerEvents: 'none'}}>Triumph Nexus</span>
         </div>
-        <div className="titlebar-controls">
+        <div className="titlebar-controls" style={{zIndex: 10, position: 'relative'}}>
           <button className="titlebar-button" onClick={() => appWindow.minimize()}>
             <Minus size={16} />
           </button>
@@ -281,14 +282,42 @@ function App() {
           <button className="btn btn-danger" onClick={() => fetchGames(true)}>
             <RefreshCw size={16} /> Rescan
           </button>
-          <button className="btn" style={{padding: '8px', background: 'transparent'}} onClick={() => toast("Settings coming soon!")}>
-            <Settings size={20} color="var(--text-muted)"/>
+          <button className={`btn ${view === 'settings' ? 'btn-primary' : ''}`} style={{padding: '8px', background: view === 'settings' ? 'var(--accent-cyan)' : 'transparent'}} onClick={() => setView(view === 'settings' ? 'games' : 'settings')}>
+            <Settings size={20} color={view === 'settings' ? '#000' : 'var(--text-muted)'}/>
           </button>
         </div>
       </header>
 
       <main className="main-content">
-        <aside className="games-list">
+        {view === 'settings' ? (
+          <section className="dashboard" style={{alignItems: 'center'}}>
+            <div style={{width: '100%', maxWidth: '600px'}}>
+              <h2 style={{fontSize: '28px', marginBottom: '20px'}}>Global Settings</h2>
+              
+              <div className="glass-panel" style={{padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <div>
+                    <div style={{fontSize: '18px', fontWeight: 600}}>System Optimization</div>
+                    <div style={{fontSize: '13px', color: 'var(--text-muted)'}}>Background execution behavior</div>
+                  </div>
+                  <button className="btn" style={{border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', background: 'transparent'}}>Enable</button>
+                </div>
+                
+                <div style={{height: '1px', background: 'rgba(255,255,255,0.05)'}}></div>
+
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                  <div>
+                    <div style={{fontSize: '18px', fontWeight: 600}}>Updates Manager</div>
+                    <div style={{fontSize: '13px', color: 'var(--text-muted)'}}>Check for new Triumph versions</div>
+                  </div>
+                  <button className="btn btn-primary" onClick={checkForUpdates}>Check Now</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <>
+            <aside className="games-list">
           <div className="search-box">
             <div style={{position: 'relative'}}>
               <Search size={16} style={{position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)'}} />
@@ -461,6 +490,8 @@ function App() {
             </>
           )}
         </section>
+        </>
+        )}
       </main>
     </>
   );
