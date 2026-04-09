@@ -173,6 +173,141 @@ fn main() {
                 eprintln!("Parse fail");
             }
         }
+        "fetch_owned" => {
+            // Get Steam install path from registry
+            let steam_path = {
+                use winreg::enums::*;
+                use winreg::RegKey;
+                let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+                hklm.open_subkey("SOFTWARE\\WOW6432Node\\Valve\\Steam")
+                    .or_else(|_| hklm.open_subkey("SOFTWARE\\Valve\\Steam"))
+                    .and_then(|k| k.get_value::<String, _>("InstallPath"))
+                    .unwrap_or_else(|_| "C:\\Program Files (x86)\\Steam".to_string())
+            };
+
+            let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+            let tr_dir = std::path::Path::new(&appdata).join("triumph");
+            std::fs::create_dir_all(&tr_dir).ok();
+            let cache_file = tr_dir.join("owned_games_cache.json");
+
+            // Check cache age (max 1 day)
+            let mut use_cache = false;
+            if let Ok(metadata) = std::fs::metadata(&cache_file) {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(duration) = std::time::SystemTime::now().duration_since(modified) {
+                        if duration.as_secs() < 24 * 3600 {
+                            use_cache = true;
+                        }
+                    }
+                }
+            }
+
+            if use_cache {
+                let cached = std::fs::read_to_string(&cache_file).unwrap_or_default();
+                println!("{}", cached);
+                process::exit(0);
+            }
+
+            // Collect all known appids from steamapps folders (installed) + steam library
+            let mut known_appids: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+
+            // 1. Scan steamapps folders for appmanifest_*.acf files (installed games)
+            let steam_path_obj = std::path::Path::new(&steam_path);
+            let mut library_paths = vec![steam_path_obj.join("steamapps")];
+
+            // Parse libraryfolders.vdf to find extra library folders
+            let lf_path = steam_path_obj.join("steamapps").join("libraryfolders.vdf");
+            if let Ok(lf_content) = std::fs::read_to_string(&lf_path) {
+                for line in lf_content.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("\"path\"") {
+                        if let Some(path_str) = trimmed.splitn(3, '"').nth(2) {
+                            let clean = path_str.trim_matches('"').replace("\\\\", "\\");
+                            let lib_steam = std::path::Path::new(&clean).join("steamapps");
+                            if lib_steam.exists() {
+                                library_paths.push(lib_steam);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Scan all library folders for appmanifests
+            for lib in &library_paths {
+                if let Ok(entries) = std::fs::read_dir(lib) {
+                    for entry in entries.flatten() {
+                        let fname = entry.file_name();
+                        let fname_str = fname.to_string_lossy();
+                        if fname_str.starts_with("appmanifest_") && fname_str.ends_with(".acf") {
+                            if let Some(id_str) = fname_str
+                                .strip_prefix("appmanifest_")
+                                .and_then(|s| s.strip_suffix(".acf"))
+                            {
+                                if let Ok(appid) = id_str.parse::<u32>() {
+                                    // Read name from manifest
+                                    let mut name = format!("App {}", appid);
+                                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                                        for mline in content.lines() {
+                                            let t = mline.trim();
+                                            if t.starts_with("\"name\"") {
+                                                if let Some(n) = t.splitn(3, '"').nth(2) {
+                                                    let clean_name = n.trim_matches('"');
+                                                    if !clean_name.is_empty() {
+                                                        name = clean_name.to_string();
+                                                    }
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    known_appids.insert(appid, name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Also check IsSubscribedApp for apps we've seen before in cache
+            // to catch uninstalled but owned games - use steamworks to query them
+            // Read a list of possible appids from the Steam registry (apps the user has interacted with)
+            {
+                use winreg::enums::*;
+                use winreg::RegKey;
+                let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+                if let Ok(apps_key) = hkcu.open_subkey("SOFTWARE\\Valve\\Steam\\Apps") {
+                    let steam_apps_api = client.apps();
+                    for subkey_name in apps_key.enum_keys().flatten() {
+                        if let Ok(appid) = subkey_name.parse::<u32>() {
+                            if !known_appids.contains_key(&appid) {
+                                if steam_apps_api.is_subscribed_app(steamworks::AppId(appid)) {
+                                    // Try to get name from registry
+                                    let name = apps_key.open_subkey(&subkey_name)
+                                        .and_then(|k| k.get_value::<String, _>("Name"))
+                                        .unwrap_or_else(|_| format!("App {}", appid));
+                                    known_appids.insert(appid, name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            #[derive(serde::Serialize)]
+            struct OwnedApp {
+                appid: u32,
+                name: String,
+            }
+
+            let owned_games: Vec<OwnedApp> = known_appids.into_iter()
+                .map(|(appid, name)| OwnedApp { appid, name })
+                .collect();
+
+            let result = serde_json::to_string(&owned_games).unwrap_or_else(|_| "[]".to_string());
+            // Save cache
+            std::fs::write(&cache_file, &result).ok();
+            println!("{}", result);
+        }
         _ => {
             eprintln!("Unknown command: {}", command);
             process::exit(1);

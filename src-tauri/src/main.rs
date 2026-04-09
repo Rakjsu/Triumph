@@ -5,8 +5,14 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use regex::Regex;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent},
+    Manager,
+};
 
 fn get_app_dir() -> PathBuf {
     let mut path = PathBuf::from(std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string()));
@@ -125,6 +131,15 @@ fn get_games() -> Vec<SteamGame> {
                     }
                 }
             }
+        }
+    }
+
+    let mut db_path = get_app_dir();
+    db_path.push("custom_games.json");
+    if let Ok(content) = fs::read_to_string(&db_path) {
+        if let Ok(custom_games) = serde_json::from_str::<Vec<SteamGame>>(&content) {
+            // Prepend explicit marker or just append
+            games.extend(custom_games);
         }
     }
     
@@ -285,6 +300,67 @@ fn list_vaults(appid: String) -> Result<Vec<VaultBackup>, String> {
 }
 
 #[tauri::command]
+async fn add_custom_game(appid: String, name: String) -> Result<(), String> {
+    let mut db_path = get_app_dir();
+    db_path.push("custom_games.json");
+    
+    let content = fs::read_to_string(&db_path).unwrap_or_else(|_| "[]".to_string());
+    let mut custom_games: Vec<SteamGame> = serde_json::from_str(&content).unwrap_or_default();
+    
+    if !custom_games.iter().any(|g| g.appid == appid) {
+        custom_games.push(SteamGame {
+            appid: appid.clone(),
+            name,
+            install_dir: "FANTASMA".to_string(), // Uninstalled flag
+            icon_url: format!("https://steamcdn-a.akamaihd.net/steam/apps/{}/capsule_231x87.jpg", appid),
+            header_url: format!("https://steamcdn-a.akamaihd.net/steam/apps/{}/header.jpg", appid),
+            playtime_hours: 0.0,
+        });
+        
+        let new_content = serde_json::to_string_pretty(&custom_games).map_err(|e| e.to_string())?;
+        fs::write(db_path, new_content).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn fetch_global_games() -> Result<Vec<SteamGame>, String> {
+    let worker = get_worker_path();
+    use std::os::windows::process::CommandExt;
+    let output = Command::new(&worker)
+        .args(&["480", "fetch_owned"])
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        // Find the JSON array line which triumph_worker generates
+        if let Some(json_array) = json_str.lines().rev().find(|l| l.starts_with('[')) {
+            #[derive(serde::Deserialize)]
+            struct OwnedGame { appid: u64, name: String }
+            
+            if let Ok(owned) = serde_json::from_str::<Vec<OwnedGame>>(json_array) {
+                let mut games = Vec::new();
+                for g in owned {
+                    // Filter exact name match for Free to Plays? No need, IsSubscribed works well mostly
+                    games.push(SteamGame {
+                        appid: g.appid.to_string(),
+                        name: g.name,
+                        install_dir: "FANTASMA".to_string(),
+                        icon_url: format!("https://steamcdn-a.akamaihd.net/steam/apps/{}/capsule_231x87.jpg", g.appid),
+                        header_url: format!("https://steamcdn-a.akamaihd.net/steam/apps/{}/header.jpg", g.appid),
+                        playtime_hours: 0.0,
+                    });
+                }
+                return Ok(games);
+            }
+        }
+    }
+    Ok(Vec::new())
+}
+
+#[tauri::command]
 fn get_vault_path(appid: String, timestamp_id: String) -> Result<String, String> {
     let mut file_path = get_vault_dir();
     file_path.push(format!("{}_{}.json", appid, timestamp_id));
@@ -293,11 +369,50 @@ fn get_vault_path(appid: String, timestamp_id: String) -> Result<String, String>
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let quit_i = MenuItem::with_id(app, "quit", "Encerrar Motor Fantasma", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Mostrar Triumph", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        use std::os::windows::process::CommandExt;
+                        let _ = std::process::Command::new("taskkill")
+                            .args(&["/IM", "triumph_worker.exe", "/F"])
+                            .creation_flags(0x08000000)
+                            .spawn();
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event: tauri::tray::TrayIconEvent| {
+                    if let tauri::tray::TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_games, run_worker, start_idle, stop_idle, kill_all_workers,
-            log_action, get_logs, save_vault_state, list_vaults, get_vault_path
+            log_action, get_logs, save_vault_state, list_vaults, get_vault_path, add_custom_game,
+            fetch_global_games
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Destroyed => {

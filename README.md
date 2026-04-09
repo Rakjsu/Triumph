@@ -20,6 +20,7 @@ Triumph Nexus is a state-of-the-art achievement unlocker built as a blazing fast
 - **Flawless Asset Retrieval:** Extracts missing achievement RGBA buffers directly from Steam memory ensuring no 404 icons.
 - **Playtime Statistics:** Live extraction of total Hours Played direct from Steam config files.
 - **Seamless Integrations:** Lock-all, Unlock-all, progress bars, beautiful Toast Notifications, and filters.
+- **Ghost Game Stability:** Safely bypasses internal Steam API panics for unowned or achievement-less games to prevent crashes.
 - **Auto Update Ready:** Stay on the cutting edge with the embedded GitHub OTA update module.
 
 ## 🚀 Setup & Development

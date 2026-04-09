@@ -1,0 +1,209 @@
+﻿diff --git a/src/App.tsx b/src/App.tsx
+index 6c94a76..59bbb4d 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useState, useCallback } from "react";
+ import { invoke } from "@tauri-apps/api/core";
+ import { getCurrentWindow } from "@tauri-apps/api/window";
++import { enable, disable, isEnabled } from '@tauri-apps/plugin-autostart';
+ import { Search, Trophy, Unlock, ServerCrash, RefreshCw, Lock, Settings, Minus, Square, X, Play, Terminal, Cloud, FileText } from "lucide-react";
+ import toast, { Toaster } from "react-hot-toast";
+ // Color thief removed from import - using canvas-based extraction instead
+@@ -53,9 +54,8 @@ function App() {
+   const [loading, setLoading] = useState(true);
+   const [loadingAch, setLoadingAch] = useState(false);
+   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+-  const [filter, setFilter] = useState<"all" | "unlocked" | "locked">("all");
++  const [filter, setFilter] = useState<"all"|"unlocked"|"locked">("all");
+   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
+-  const [cacheBust, setCacheBust] = useState<number>(0);
+   const [view, setView] = useState<'games' | 'settings' | 'shadow_log'>('games');
+   const [idlingGames, setIdlingGames] = useState<Record<string, number>>({});
+   
+@@ -63,6 +63,41 @@ function App() {
+   const [showVault, setShowVault] = useState(false);
+   const [logsText, setLogsText] = useState<string>("");
+   const appWindow = getCurrentWindow();
++  
++  const [showCloseDialog, setShowCloseDialog] = useState(false);
++  const [autoStart, setAutoStart] = useState(false);
++
++  // Sync Global Ghost Games
++  const syncGhostGames = async (currentGames: SteamGame[]) => {
++    try {
++      const g_games: any[] = await invoke("fetch_global_games");
++      const existingIds = new Set(currentGames.map(g => g.appid.toString()));
++      const newGhosts = g_games.filter((g: any) => !existingIds.has(g.appid.toString()));
++      if (newGhosts.length > 0) {
++        setGames(prev => {
++          const combined = [...prev, ...newGhosts];
++          // sort so installed are first, ghosts are last
++          return combined.sort((a,b) => {
++             const aInst = a.install_dir === "FANTASMA" ? 0 : 1;
++             const bInst = b.install_dir === "FANTASMA" ? 0 : 1;
++             return bInst - aInst;
++          });
++        });
++        toast.success(`Localizados ${newGhosts.length} jogos n├úo instalados do seu cofre!`);
++      }
++    } catch(e) { }
++  };
++
++  useEffect(() => {
++    isEnabled().then(setAutoStart).catch(()=>{});
++  }, []);
++
++  const toggleAutoStart = async () => {
++    try {
++      if (autoStart) { await disable(); setAutoStart(false); } 
++      else { await enable(); setAutoStart(true); }
++    } catch(e) { console.error(e) }
++  };
+ 
+   const handleMaximize = async () => {
+     try {
+@@ -77,19 +112,31 @@ function App() {
+   };
+ 
+   const handleClose = async () => {
+-    try {
+-      await invoke("kill_all_workers");
+-    } catch (e) { console.error(e); }
+-    try {
+-      await appWindow.close();
+-    } catch (e) { console.error(e); }
++    setShowCloseDialog(true);
++  };
++  
++  const confirmClose = async () => {
++    try { await invoke("kill_all_workers"); } catch (e) { }
++    try { await appWindow.destroy(); } catch (e) { }
++  };
++  
++  const confirmMinimizeTray = async () => {
++    setShowCloseDialog(false);
++    appWindow.hide();
+   };
+ 
+   useEffect(() => {
+-    fetchGames(true);
++    fetchGames(true).then((gamesData) => {
++        // Run global discovery asynchronously after getting local games
++        if(gamesData && gamesData.length > 0) {
++            syncGhostGames(gamesData);
++        }
++    });
+     checkForUpdates();
+   }, []);
+ 
++
++
+   useEffect(() => {
+     if (view === 'shadow_log') {
+       invoke("get_logs").then(res => setLogsText(res as string)).catch(console.error);
+@@ -161,7 +208,7 @@ function App() {
+   }
+ 
+   async function fetchGames(isRescan = false) {
+-    setLoading(true);
++    if (!isRescan) setLoading(true);
+ 
+     if (isRescan) {
+       // Full cache wipe ÔÇö reset all state
+@@ -170,22 +217,19 @@ function App() {
+       setColorData(null);
+       setFilter("all");
+       setErrorMsg(null);
+-
+-      // Bust browser image cache for Steam CDN by reloading images with a timestamp
+-      // We use a global cache-bust key stored in state
+-      setCacheBust(Date.now());
+-
+-      toast.success("Cache limpo! Buscando dados frescos...", { icon: "­ƒöä" });
+     }
+ 
+     try {
+       const res: SteamGame[] = await invoke("get_games");
+       setGames(res);
++      setLoading(false);
++      return res;
+     } catch (e) {
+       console.error(e);
+       setErrorMsg("Failed to load games. Make sure Steam is installed.");
++      setLoading(false);
++      return [];
+     }
+-    setLoading(false);
+   }
+ 
+   async function loadAchievements(game: SteamGame) {
+@@ -373,13 +417,18 @@ function App() {
+         }
+         return current;
+       });
+-
+     }, 1000);
+ 
+     return () => clearInterval(intervalId);
+   }, [idlingGames]);
+ 
+-  const filteredGames = games.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
++  const sortedGames = [...games].sort((a, b) => {
++    if (a.install_dir === "FANTASMA" && b.install_dir !== "FANTASMA") return -1;
++    if (a.install_dir !== "FANTASMA" && b.install_dir === "FANTASMA") return 1;
++    return a.name.localeCompare(b.name);
++  });
++
++  const filteredGames = sortedGames.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
+   const unlockedCount = achievements.filter(a => a.unlocked).length;
+   const progressRatio = achievements.length > 0 ? (unlockedCount / achievements.length) * 100 : 0;
+ 
+@@ -439,9 +488,11 @@ function App() {
+                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                   <div>
+                     <div style={{fontSize: '18px', fontWeight: 600}}>System Optimization</div>
+-                    <div style={{fontSize: '13px', color: 'var(--text-muted)'}}>Background execution behavior</div>
++                    <div style={{fontSize: '13px', color: 'var(--text-muted)'}}>Start Engine minimized when Windows boots</div>
+                   </div>
+-                  <button className="btn" style={{border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', background: 'transparent'}}>Enable</button>
++                  <button className="btn" style={{border: `1px solid ${autoStart ? 'transparent' : 'var(--accent-cyan)'}`, color: autoStart ? '#000' : 'var(--accent-cyan)', background: autoStart ? 'var(--accent-cyan)' : 'transparent'}} onClick={toggleAutoStart}>
++                     {autoStart ? 'Enabled' : 'Enable'}
++                  </button>
+                 </div>
+                 
+                 <div style={{height: '1px', background: 'rgba(255,255,255,0.05)'}}></div>
+@@ -512,6 +563,9 @@ function App() {
+                   style={selectedGame?.appid === g.appid ? {borderColor: colorData ? colorData : '', background: colorData ? `linear-gradient(90deg, ${colorData}22 0%, transparent 100%)` : ''} : {}}
+                 >
+                   <div style={{position: 'relative', width: '46px', height: '22px', flexShrink: 0}}>
++                    {g.install_dir === "FANTASMA" && (
++                       <div style={{position: 'absolute', top: '-5px', right: '-5px', background: '#ff00ff', color: '#fff', fontSize: '8px', fontWeight: 'bold', padding: '1px 3px', borderRadius: '4px', zIndex: 5}}>FANTASMA</div>
++                    )}
+                     <div className="game-icon-fallback" style={{display: 'none', position: 'absolute', top:0, left:0, width:'100%', height:'100%', background:'linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))', borderRadius:'4px', alignItems:'center', justifyContent:'center', fontSize:'10px', fontWeight:'bold', color:'#000', opacity: 0.8}}>
+                       {g.name.substring(0, 2).toUpperCase()}
+                     </div>
+@@ -669,6 +723,23 @@ function App() {
+           )}
+         </section>
+         
++        
++        {showCloseDialog && (
++          <div style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
++            <div className="glass-panel" style={{width: '380px', padding: '25px', border: '1px solid var(--accent-cyan)', boxShadow: '0 0 30px rgba(0, 255, 255, 0.15)'}}>
++              <h3 style={{marginBottom: '15px', color: '#fff', fontSize: '20px'}}>Sair do Triumph Engine</h3>
++              <p style={{color: 'var(--text-muted)', marginBottom: '25px', lineHeight: '1.4'}}>
++                Voc├¬ deseja encerrar completamente a nave-m├úe e parar todos os farms de carta simult├óneos, ou deseja <strong>Esconder nas Sombras (Bandeja do Windows)</strong> para ela continuar farmando invis├¡vel?
++              </p>
++              <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
++                <button className="btn btn-primary" onClick={confirmMinimizeTray}>Esconder na Bandeja (Continuar Farm)</button>
++                <button className="btn btn-danger" onClick={confirmClose}>Encerrar Tudo e Sair</button>
++                <button className="btn" style={{marginTop: '10px'}} onClick={() => setShowCloseDialog(false)}>Cancelar</button>
++              </div>
++            </div>
++          </div>
++        )}
++
+         {showVault && (
+           <div style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+             <div className="glass-panel" style={{width: '450px', padding: '25px', border: '1px solid var(--accent-purple)', boxShadow: '0 0 40px rgba(150, 0, 255, 0.2)'}}>
