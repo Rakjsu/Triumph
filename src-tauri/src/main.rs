@@ -5,12 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-use regex::Regex;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder},
     Manager,
 };
 
@@ -191,10 +190,18 @@ async fn run_worker(appid: String, args: Vec<String>) -> Result<String, String> 
         .output()
         .map_err(|e| format!("Failed to run worker: {} ({:?})", e, worker))?;
 
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(stdout)
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        let stdout = stdout.trim();
+        if !stdout.is_empty() {
+            Err(stdout.to_string())
+        } else {
+            Err(stderr.trim().to_string())
+        }
     }
 }
 
@@ -367,6 +374,28 @@ fn get_vault_path(appid: String, timestamp_id: String) -> Result<String, String>
     Ok(file_path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn close_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
+#[tauri::command]
+fn hide_app(app_handle: tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+#[tauri::command]
+fn wipe_caches() -> Result<(), String> {
+    let mut app_dir = get_app_dir();
+    app_dir.push("owned_games_cache.json");
+    let _ = fs::remove_file(app_dir);
+    // Note: We don't wipe global_applist_cache.json to avoid hitting the steam web API excessively
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
@@ -412,9 +441,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_games, run_worker, start_idle, stop_idle, kill_all_workers,
             log_action, get_logs, save_vault_state, list_vaults, get_vault_path, add_custom_game,
-            fetch_global_games
+            fetch_global_games, wipe_caches, close_app, hide_app
         ])
-        .on_window_event(|window, event| match event {
+        .on_window_event(|_window, event| match event {
             tauri::WindowEvent::Destroyed => {
                 use std::os::windows::process::CommandExt;
                 let _ = std::process::Command::new("taskkill")

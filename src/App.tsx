@@ -24,6 +24,37 @@ interface Achievement {
   icon_rgba?: number[];
 }
 
+interface WorkerStatus {
+  success: boolean;
+  error?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  try {
+    const parsed = JSON.parse(raw) as Partial<WorkerStatus>;
+    if (parsed.error) return parsed.error;
+  } catch {
+    // Fall through to the raw message.
+  }
+  return raw || "Unknown worker error";
+}
+
+function parseWorkerStatus(result: string): WorkerStatus {
+  let parsed: Partial<WorkerStatus>;
+  try {
+    parsed = JSON.parse(result);
+  } catch {
+    throw new Error("Worker returned an invalid response");
+  }
+
+  if (!parsed.success) {
+    throw new Error(parsed.error || "Worker operation failed");
+  }
+
+  return { success: true };
+}
+
 // Convert RGBA byte array from Rust to Base64 Image (supports any size: 64, 128, 256px)
 function rgbaToBase64(rgbaBuffer: number[]): string {
   try {
@@ -129,12 +160,12 @@ function App() {
   
   const confirmClose = async () => {
     try { await invoke("kill_all_workers"); } catch (e) { }
-    try { await appWindow.destroy(); } catch (e) { }
+    try { await invoke("close_app"); } catch (e) { }
   };
   
   const confirmMinimizeTray = async () => {
     setShowCloseDialog(false);
-    appWindow.hide();
+    try { await invoke("hide_app"); } catch (e) { }
   };
 
   useEffect(() => {
@@ -174,14 +205,12 @@ function App() {
         appid: selectedGame.appid,
         args: ["restore", filePath]
       });
-      const parsed = JSON.parse(result);
-      if (parsed.success) {
-        toast.success("Time altered! Cloud Vault Restored.");
-        writeLog(`Restaurou o estado do jogo ${selectedGame.name} para o backup temporal de [${timestampId}]`);
-        await loadAchievements(selectedGame);
-      }
+      parseWorkerStatus(result);
+      toast.success("Time altered! Cloud Vault Restored.");
+      writeLog(`Restaurou o estado do jogo ${selectedGame.name} para o backup temporal de [${timestampId}]`);
+      await loadAchievements(selectedGame);
     } catch (e) {
-      toast.error(`Restore failed: ${e}`);
+      toast.error(`Restore failed: ${getErrorMessage(e)}`);
       setLoadingAch(false);
     }
   };
@@ -284,15 +313,12 @@ function App() {
         args: ["toggle", achId, (!currentState).toString()]
       });
       
-      const parsed = JSON.parse(result);
-      if (!parsed.success) {
-        throw new Error("Steamworks returned failure");
-      }
+      parseWorkerStatus(result);
       toast.success(currentState ? "Achievement Locked" : "Achievement Unlocked!");
     } catch (e) {
       console.error(e);
       setAchievements(prev => prev.map(a => a.id === achId ? { ...a, unlocked: currentState } : a));
-      toast.error("Failed to toggle achievement");
+      toast.error(`Failed to toggle achievement: ${getErrorMessage(e)}`);
     }
   }
 
@@ -334,14 +360,12 @@ function App() {
         appid: selectedGame.appid,
         args: ["unlock_all"]
       });
-      const parsed = JSON.parse(result);
-      if (parsed.success) {
-        toast.success("Successfully unlocked all!");
-        await loadAchievements(selectedGame);
-      }
+      parseWorkerStatus(result);
+      toast.success("Successfully unlocked all!");
+      await loadAchievements(selectedGame);
     } catch (e) {
       console.error(e);
-      toast.error(`Failed to unlock all: ${e}`);
+      toast.error(`Failed to unlock all: ${getErrorMessage(e)}`);
       setLoadingAch(false);
     }
   }
@@ -356,14 +380,12 @@ function App() {
         appid: selectedGame.appid,
         args: ["lock_all"]
       });
-      const parsed = JSON.parse(result);
-      if (parsed.success) {
-        toast.success("Successfully locked all!");
-        await loadAchievements(selectedGame);
-      }
+      parseWorkerStatus(result);
+      toast.success("Successfully locked all!");
+      await loadAchievements(selectedGame);
     } catch (e) {
       console.error(e);
-      toast.error(`Failed to lock all: ${e}`);
+      toast.error(`Failed to lock all: ${getErrorMessage(e)}`);
       setLoadingAch(false);
     }
   }
@@ -472,7 +494,10 @@ function App() {
           Triumph <span style={{fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400}}>Unlocker {updateAvailable && <span style={{color: 'cyan', fontSize: '11px', padding: '2px 6px', background: 'rgba(0,255,255,0.1)', borderRadius: '4px', marginLeft: '5px'}}>v{updateAvailable.version}</span>}</span>
         </div>
         <div style={{display: 'flex', gap: '15px'}}>
-          <button className="btn btn-danger" onClick={() => fetchGames(true)}>
+          <button className="btn btn-danger" onClick={async () => {
+            try { await invoke("wipe_caches"); } catch (e) { }
+            fetchGames(true).then((g: any) => { if (g && g.length > 0) syncGhostGames(g); });
+          }}>
             <RefreshCw size={16} /> Rescan
           </button>
           <button className={`btn ${view === 'shadow_log' ? 'btn-primary' : ''}`} style={{padding: '8px', background: view === 'shadow_log' ? 'var(--accent-purple)' : 'transparent'}} onClick={() => setView('shadow_log')}>

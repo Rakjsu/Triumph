@@ -14,11 +14,35 @@ struct AchievementResult {
     icon_rgba: Option<Vec<u8>>,
 }
 
+#[derive(Serialize)]
+struct WorkerResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+fn print_success() {
+    println!("{}", r#"{"success":true}"#);
+}
+
+fn fail(message: impl Into<String>) -> ! {
+    let message = message.into();
+    eprintln!("{}", message);
+    let response = WorkerResponse {
+        success: false,
+        error: Some(message),
+    };
+    match serde_json::to_string(&response) {
+        Ok(json) => println!("{}", json),
+        Err(_) => println!(r#"{{"success":false,"error":"worker serialization failed"}}"#),
+    }
+    process::exit(1);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: triumph_worker <appid> <command> [args...]");
-        process::exit(1);
+        fail("Usage: triumph_worker <appid> <command> [args...]");
     }
 
     let app_id = &args[1];
@@ -26,14 +50,13 @@ fn main() {
 
     env::set_var("SteamAppId", app_id);
 
-    let app_id_u32 = app_id.parse::<u32>().unwrap_or(480);
+    let app_id_u32 = app_id
+        .parse::<u32>()
+        .unwrap_or_else(|_| fail(format!("Invalid appid: {}", app_id)));
     
     let (client, single) = match Client::init_app(app_id_u32) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("Failed to initialize Steamworks: {}", e);
-            process::exit(1);
-        }
+        Err(e) => fail(format!("Failed to initialize Steamworks: {}", e)),
     };
 
     let user_stats = client.user_stats();
@@ -44,7 +67,7 @@ fn main() {
 
     match command.as_str() {
         "idle" => {
-            println!("Idling started for AppID {}", app_id);
+            eprintln!("Idling started for AppID {}", app_id);
             // We just loop forever, occasionally running callbacks so Steam knows we are alive
             loop {
                 std::thread::sleep(Duration::from_millis(2000));
@@ -96,61 +119,72 @@ fn main() {
                 single.run_callbacks();
             }
 
-            let json = serde_json::to_string(&achievements).unwrap();
-            println!("{}", json);
+            match serde_json::to_string(&achievements) {
+                Ok(json) => println!("{}", json),
+                Err(e) => fail(format!("Failed to serialize achievements: {}", e)),
+            }
         }
         "toggle" => {
             if args.len() < 5 {
-                eprintln!("Usage: triumph_worker <appid> toggle <achievement_id> <true/false>");
-                process::exit(1);
+                fail("Usage: triumph_worker <appid> toggle <achievement_id> <true/false>");
             }
             let ach_id = &args[3];
-            let state: bool = args[4].parse().unwrap_or(false);
+            let state: bool = args[4]
+                .parse()
+                .unwrap_or_else(|_| fail(format!("Invalid achievement state: {}", args[4])));
 
             let ach = user_stats.achievement(ach_id);
             let res = if state { ach.set() } else { ach.clear() };
             
             if let Err(e) = res {
-                eprintln!("Failed to toggle achievement: {:?}", e);
+                fail(format!("Failed to toggle achievement: {:?}", e));
             } else if let Err(e) = user_stats.store_stats() {
-                eprintln!("Failed to store stats: {:?}", e);
+                fail(format!("Failed to store stats: {:?}", e));
             } else {
-                println!("{}", r#"{"success": true}"#);
+                print_success();
             }
         }
         "unlock_all" => {
             let names = user_stats.get_achievement_names();
             if let Some(names) = names {
                 for name in names {
-                    let _ = user_stats.achievement(&name).set();
+                    if let Err(e) = user_stats.achievement(&name).set() {
+                        fail(format!("Failed to unlock achievement {}: {:?}", name, e));
+                    }
                 }
+            } else {
+                fail("Failed to read achievement names");
             }
             if let Err(e) = user_stats.store_stats() {
-                eprintln!("Failed to store stats: {:?}", e);
+                fail(format!("Failed to store stats: {:?}", e));
             } else {
-                println!("{}", r#"{"success": true}"#);
+                print_success();
             }
         }
         "lock_all" => {
             let names = user_stats.get_achievement_names();
             if let Some(names) = names {
                 for name in names {
-                    let _ = user_stats.achievement(&name).clear();
+                    if let Err(e) = user_stats.achievement(&name).clear() {
+                        fail(format!("Failed to lock achievement {}: {:?}", name, e));
+                    }
                 }
+            } else {
+                fail("Failed to read achievement names");
             }
             if let Err(e) = user_stats.store_stats() {
-                eprintln!("Failed to store stats: {:?}", e);
+                fail(format!("Failed to store stats: {:?}", e));
             } else {
-                println!("{}", r#"{"success": true}"#);
+                print_success();
             }
         }
         "restore" => {
             if args.len() < 4 {
-                eprintln!("Needs backup path");
-                process::exit(1);
+                fail("Usage: triumph_worker <appid> restore <backup_path>");
             }
             let file_path = &args[3];
-            let content = std::fs::read_to_string(file_path).unwrap_or_default();
+            let content = std::fs::read_to_string(file_path)
+                .unwrap_or_else(|e| fail(format!("Failed to read backup file {}: {}", file_path, e)));
             
             #[derive(serde::Deserialize)]
             struct AchRestore { id: String, unlocked: bool }
@@ -158,19 +192,23 @@ fn main() {
             if let Ok(backup) = serde_json::from_str::<Vec<AchRestore>>(&content) {
                 for ach in backup {
                     let a = user_stats.achievement(&ach.id);
-                    if ach.unlocked {
-                        let _ = a.set();
+                    let result = if ach.unlocked {
+                        a.set()
                     } else {
-                        let _ = a.clear();
+                        a.clear()
+                    };
+
+                    if let Err(e) = result {
+                        fail(format!("Failed to restore achievement {}: {:?}", ach.id, e));
                     }
                 }
                 if let Err(e) = user_stats.store_stats() {
-                    eprintln!("Failed: {:?}", e);
+                    fail(format!("Failed to store stats: {:?}", e));
                 } else {
-                    println!("{}", r#"{"success": true}"#);
+                    print_success();
                 }
             } else {
-                eprintln!("Parse fail");
+                fail("Failed to parse backup file");
             }
         }
         "fetch_owned" => {
@@ -210,6 +248,47 @@ fn main() {
 
             // Collect all known appids from steamapps folders (installed) + steam library
             let mut known_appids: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+
+            // Load or fetch global app list cache
+            let mut global_applist: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
+            let applist_cache = tr_dir.join("global_applist_cache.json");
+            
+            let mut needs_dl = true;
+            if let Ok(metadata) = std::fs::metadata(&applist_cache) {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(duration) = std::time::SystemTime::now().duration_since(modified) {
+                        if duration.as_secs() < 7 * 24 * 3600 {
+                            needs_dl = false;
+                        }
+                    }
+                }
+            }
+
+            if needs_dl {
+                if let Ok(res) = ureq::get("https://api.steampowered.com/ISteamApps/GetAppList/v2/").call() {
+                    if let Ok(text) = res.into_body().read_to_string() {
+                        std::fs::write(&applist_cache, &text).ok();
+                    }
+                }
+            }
+
+            if let Ok(content) = std::fs::read_to_string(&applist_cache) {
+                #[derive(serde::Deserialize)]
+                struct GlobalApp { appid: u32, name: String }
+                #[derive(serde::Deserialize)]
+                struct AppListInner { apps: Vec<GlobalApp> }
+                #[derive(serde::Deserialize)]
+                struct AppList { applist: AppListInner }
+
+                if let Ok(parsed) = serde_json::from_str::<AppList>(&content) {
+                    for app in parsed.applist.apps {
+                        if !app.name.is_empty() {
+                            global_applist.insert(app.appid, app.name);
+                        }
+                    }
+                }
+            }
+
 
             // 1. Scan steamapps folders for appmanifest_*.acf files (installed games)
             let steam_path_obj = std::path::Path::new(&steam_path);
@@ -251,7 +330,7 @@ fn main() {
                                             let t = mline.trim();
                                             if t.starts_with("\"name\"") {
                                                 if let Some(n) = t.splitn(3, '"').nth(2) {
-                                                    let clean_name = n.trim_matches('"');
+                                                    let clean_name = n.trim().trim_matches('"');
                                                     if !clean_name.is_empty() {
                                                         name = clean_name.to_string();
                                                     }
@@ -282,13 +361,29 @@ fn main() {
                             if !known_appids.contains_key(&appid) {
                                 if steam_apps_api.is_subscribed_app(steamworks::AppId(appid)) {
                                     // Try to get name from registry
-                                    let name = apps_key.open_subkey(&subkey_name)
+                                    let name_from_reg = apps_key.open_subkey(&subkey_name)
                                         .and_then(|k| k.get_value::<String, _>("Name"))
-                                        .unwrap_or_else(|_| format!("App {}", appid));
+                                        .ok();
+                                        
+                                    let name = name_from_reg
+                                        .filter(|n| !n.is_empty() && !n.starts_with("App "))
+                                        .or_else(|| global_applist.get(&appid).cloned())
+                                        .unwrap_or_else(|| format!("App {}", appid));
+                                        
                                     known_appids.insert(appid, name);
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // 3. Fast Global Entitlement Scan
+            let steam_apps_api = client.apps();
+            for (&global_appid, global_name) in &global_applist {
+                if !known_appids.contains_key(&global_appid) {
+                    if steam_apps_api.is_subscribed_app(steamworks::AppId(global_appid)) {
+                        known_appids.insert(global_appid, global_name.clone());
                     }
                 }
             }
@@ -299,9 +394,43 @@ fn main() {
                 name: String,
             }
 
-            let owned_games: Vec<OwnedApp> = known_appids.into_iter()
-                .map(|(appid, name)| OwnedApp { appid, name })
-                .collect();
+            let all_names: Vec<String> = known_appids.values().cloned().collect();
+            let mut owned_games = Vec::new();
+            for (appid, name) in known_appids {
+                if name.starts_with("App ") {
+                    continue;
+                }
+
+                let lower = name.to_lowercase();
+                let block_list = [
+                    " dlc", "dlc ", "- dlc", "(dlc)", "[dlc]", "soundtrack",
+                    "artbook", "season pass", "dedicated server", "playtest",
+                    " beta", " demo", "trailer", "redkit", "modding tools",
+                    "new quest", "expansion pass", "bonus content",
+                    "cinematic pack", "immersion pack", "texture pack",
+                    "pre-order", " bonus", " character pack", "content pack"
+                ];
+
+                let mut is_blocked = false;
+                for kw in block_list.iter() {
+                    if lower.contains(kw) && !lower.contains("backpack") && !lower.contains("jackbox") {
+                        is_blocked = true;
+                        break;
+                    }
+                }
+
+                if !is_blocked && name.contains(" - ") {
+                    let parts: Vec<&str> = name.splitn(2, " - ").collect();
+                    let prefix = parts[0];
+                    if all_names.iter().any(|n| n == prefix && n != &name) {
+                        is_blocked = true;
+                    }
+                }
+
+                if !is_blocked {
+                    owned_games.push(OwnedApp { appid, name });
+                }
+            }
 
             let result = serde_json::to_string(&owned_games).unwrap_or_else(|_| "[]".to_string());
             // Save cache
@@ -309,8 +438,7 @@ fn main() {
             println!("{}", result);
         }
         _ => {
-            eprintln!("Unknown command: {}", command);
-            process::exit(1);
+            fail(format!("Unknown command: {}", command));
         }
     }
 }

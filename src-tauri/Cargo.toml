@@ -5,6 +5,7 @@ description = "A Tauri App"
 authors = ["you"]
 default-run = "triumph"
 edition = "2021"
+autobins = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -28,6 +29,10 @@ tauri-plugin-shell = "2.3.5"
 winreg = "0.56.0"
 regex = "1.12.3"
 ureq = "3.3.0"
+
+[[bin]]
+name = "triumph"
+path = "src/main.rs"
 
 [[bin]]
 name = "triumph_worker"
