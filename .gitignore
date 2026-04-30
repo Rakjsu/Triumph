@@ -21,6 +21,7 @@ test_*.js
 test_*.rs
 src-tauri/test*.rs
 src-tauri/src/bin/test_*.rs
+src-tauri/test-bin-probes/
 
 # Editor directories and files
 .vscode/*

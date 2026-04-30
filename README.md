@@ -52,6 +52,8 @@ cargo build --release --bin triumph_worker
 ```
 
 Alternatively, you can just download the `.exe` automatically provided in the **Releases** tab.
+The Windows installer is configured as a per-machine installer, so it installs under `Program Files` and requires administrator permission.
+Unsigned builds may still show a Windows SmartScreen or unknown publisher warning.
 
 ## Disclaimer
 
