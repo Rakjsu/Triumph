@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Refactored the React app shell into typed hooks, shared helpers, and presentational components without changing behavior.
 - Ignored local agent/tooling notes, scratch outputs, and experimental test probes so repository status stays focused on product changes.
 
 ### Fixed
