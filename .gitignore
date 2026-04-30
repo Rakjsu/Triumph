@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 
+# Local agent/tooling notes and temporary outputs
+.clinerules-*
+out.json
+
+# Local experiment scripts and scratch probes
+test_*.js
+test_*.rs
+src-tauri/test*.rs
+src-tauri/src/bin/test_*.rs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Ignored local agent/tooling notes, scratch outputs, and experimental test probes so repository status stays focused on product changes.
+
 ### Fixed
 
 - Standardized worker success and error JSON responses so failed Steam operations no longer produce empty or unparseable responses.
