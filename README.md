@@ -65,7 +65,25 @@ $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<private-key-password>"
 npm run tauri build
 ```
 
-Upload both the generated installer and `latest.json` from `src-tauri/target/release/bundle/nsis/` to the matching GitHub Release. The installed app checks `https://github.com/Rakjsu/Triumph/releases/latest/download/latest.json` from the Settings update button.
+Store the same values as GitHub repository secrets when building releases outside your local machine:
+
+- `TAURI_SIGNING_PRIVATE_KEY`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+Keep `.tauri-updater/` local only. It is ignored by Git and must never be committed.
+
+Manual release checklist:
+
+1. Bump the app version in the npm, Cargo, and Tauri manifests.
+2. Export `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+3. Run `npm run build`, `cd src-tauri && cargo check`, and `cargo build --release --bin triumph_worker`.
+4. Run `npm run tauri build`.
+5. Generate or verify `latest.json` in `src-tauri/target/release/bundle/nsis/`.
+6. Create the matching Git tag and GitHub Release.
+7. Upload the generated `.exe`, `.exe.sig`, and `latest.json`.
+8. Confirm `https://github.com/Rakjsu/Triumph/releases/latest/download/latest.json` returns the new version.
+
+The installed app checks that endpoint at startup and from the Settings update button. Startup checks are silent unless an update is available.
 
 ## Disclaimer
 

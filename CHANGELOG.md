@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Bumped the app to 2.0.4 to publish the startup update check.
+- Added a silent startup update check while keeping manual update checks visible from Settings.
 - Bumped the app to 2.0.3 to validate the signed GitHub auto update flow from 2.0.2.
 - Bumped the app to 2.0.2 and enabled signed Tauri updater artifacts for GitHub Releases.
 - Bumped the app to 2.0.1 and configured the Windows NSIS installer for per-machine installation under `Program Files`.
@@ -24,6 +26,7 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
+- Documented updater signing secrets and the manual GitHub Release checklist.
 - Updated README validation commands.
 - Updated the React badge to match the React 19 dependency.
 - Fixed broken README section heading characters.

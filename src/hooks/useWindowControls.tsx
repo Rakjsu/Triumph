@@ -13,6 +13,7 @@ export function useWindowControls() {
 
   useEffect(() => {
     isEnabled().then(setAutoStart).catch(() => {});
+    void checkForUpdates({ silent: true });
   }, []);
 
   const toggleAutoStart = async () => {
@@ -55,7 +56,7 @@ export function useWindowControls() {
     try { await invoke("hide_app"); } catch (e) { }
   };
 
-  async function checkForUpdates() {
+  async function checkForUpdates(options: { silent?: boolean } = {}) {
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
       const { relaunch } = await import("@tauri-apps/plugin-process");
@@ -83,12 +84,14 @@ export function useWindowControls() {
             }}>Instalar</button>
           </div>
         ), {duration: 10000});
-      } else {
+      } else if (!options.silent) {
         toast.success("Você já está na versão mais recente.");
       }
     } catch(e) {
       console.log("Updater: no update or not configured", e);
-      toast.error("Não foi possível verificar atualizações.");
+      if (!options.silent) {
+        toast.error("Não foi possível verificar atualizações.");
+      }
     }
   }
 
