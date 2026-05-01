@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Bumped the app to 2.0.3 to validate the signed GitHub auto update flow from 2.0.2.
 - Bumped the app to 2.0.2 and enabled signed Tauri updater artifacts for GitHub Releases.
 - Bumped the app to 2.0.1 and configured the Windows NSIS installer for per-machine installation under `Program Files`.
 - Refactored the React app shell into typed hooks, shared helpers, and presentational components without changing behavior.
@@ -13,6 +14,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Confirmed the updater toast messages are stored as UTF-8 for the 2.0.3 validation release.
 - Registered the updater and process plugins so the in-app update flow can install and relaunch after applying an update.
 - Standardized worker success and error JSON responses so failed Steam operations no longer produce empty or unparseable responses.
 - Improved frontend handling of worker errors so toggle, bulk lock/unlock, and vault restore failures show the real error and avoid unsafe `JSON.parse` calls.
