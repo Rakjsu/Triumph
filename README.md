@@ -55,6 +55,18 @@ Alternatively, you can just download the `.exe` automatically provided in the **
 The Windows installer is configured as a per-machine installer, so it installs under `Program Files` and requires administrator permission.
 Unsigned builds may still show a Windows SmartScreen or unknown publisher warning.
 
+## Release & Auto Update
+
+Triumph uses the Tauri updater with a signed `latest.json` hosted on GitHub Releases:
+
+```bash
+$env:TAURI_SIGNING_PRIVATE_KEY=Get-Content -Raw "C:\path\to\private.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<private-key-password>"
+npm run tauri build
+```
+
+Upload both the generated installer and `latest.json` from `src-tauri/target/release/bundle/nsis/` to the matching GitHub Release. The installed app checks `https://github.com/Rakjsu/Triumph/releases/latest/download/latest.json` from the Settings update button.
+
 ## Disclaimer
 
 This tool manipulates your local Steam statistics using strictly official Steamworks SDK routines. However, the use of achievement managers might be frowned upon by specific third-party multiplayer tracking services. Use at your own discretion.

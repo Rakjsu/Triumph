@@ -58,32 +58,37 @@ export function useWindowControls() {
   async function checkForUpdates() {
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
+      const { relaunch } = await import("@tauri-apps/plugin-process");
       const update = await check();
       if (update) {
         const updateInfo = update as UpdateInfo;
         setUpdateAvailable(updateInfo);
         toast.custom((t) => (
           <div className="glass-panel" style={{padding: "15px", display: "flex", gap: "15px", alignItems: "center"}}>
-            <span style={{fontSize: "20px"}}>â¬†ï¸</span>
+            <span style={{fontSize: "20px"}}>Update</span>
             <div>
-               <b>Nova VersÃ£o DisponÃ­vel!</b>
-               <div style={{fontSize: "12px", color: "var(--text-muted)"}}>{updateInfo.version}</div>
+              <b>Nova versão disponível!</b>
+              <div style={{fontSize: "12px", color: "var(--text-muted)"}}>{updateInfo.version}</div>
             </div>
             <button className="btn btn-primary" onClick={async () => {
               toast.dismiss(t.id);
-              const installToast = toast.loading("Baixando atualizaÃ§Ã£o...");
+              const installToast = toast.loading("Baixando atualização...");
               try {
                 await updateInfo.downloadAndInstall();
                 toast.success("Pronto! Reiniciando...", {id: installToast});
+                await relaunch();
               } catch(e) {
                 toast.error("Falha ao atualizar.", {id: installToast});
               }
             }}>Instalar</button>
           </div>
         ), {duration: 10000});
+      } else {
+        toast.success("Você já está na versão mais recente.");
       }
     } catch(e) {
       console.log("Updater: no update or not configured", e);
+      toast.error("Não foi possível verificar atualizações.");
     }
   }
 
