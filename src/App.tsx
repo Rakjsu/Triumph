@@ -25,7 +25,6 @@ function App() {
         steam.syncGhostGames(gamesData);
       }
     });
-    windowControls.checkForUpdates();
   }, []);
 
   const sortedGames = [...steam.games].sort((a, b) => {
@@ -66,6 +65,7 @@ function App() {
         {view === "settings" ? (
           <SettingsView
             autoStart={windowControls.autoStart}
+            appVersion={windowControls.appVersion}
             toggleAutoStart={windowControls.toggleAutoStart}
             checkForUpdates={windowControls.checkForUpdates}
           />

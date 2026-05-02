@@ -11,6 +11,7 @@
   "permissions": [
     "updater:default",
     "process:allow-restart",
+    "opener:default",
     "autostart:default"
   ]
 }

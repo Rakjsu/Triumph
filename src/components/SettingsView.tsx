@@ -1,10 +1,11 @@
 interface SettingsViewProps {
   autoStart: boolean;
+  appVersion: string;
   toggleAutoStart: () => void;
   checkForUpdates: () => void;
 }
 
-export function SettingsView({ autoStart, toggleAutoStart, checkForUpdates }: SettingsViewProps) {
+export function SettingsView({ autoStart, appVersion, toggleAutoStart, checkForUpdates }: SettingsViewProps) {
   return (
     <section className="dashboard" style={{alignItems: "center"}}>
       <div style={{width: "100%", maxWidth: "600px"}}>
@@ -26,7 +27,9 @@ export function SettingsView({ autoStart, toggleAutoStart, checkForUpdates }: Se
           <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
             <div>
               <div style={{fontSize: "18px", fontWeight: 600}}>Updates Manager</div>
-              <div style={{fontSize: "13px", color: "var(--text-muted)"}}>Check for new Triumph versions</div>
+              <div style={{fontSize: "13px", color: "var(--text-muted)"}}>
+                Check for new Triumph versions{appVersion ? ` - Current version ${appVersion}` : ""}
+              </div>
             </div>
             <button className="btn btn-primary" onClick={checkForUpdates}>Check Now</button>
           </div>

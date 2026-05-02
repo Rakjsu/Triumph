@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Bumped the app to 2.0.5 to publish the updater Settings and fallback improvements.
+- Improved the updater toast copy, added a GitHub Releases fallback when install fails, and exposed the current app version in Settings.
 - Bumped the app to 2.0.4 to publish the startup update check.
 - Added a silent startup update check while keeping manual update checks visible from Settings.
 - Bumped the app to 2.0.3 to validate the signed GitHub auto update flow from 2.0.2.

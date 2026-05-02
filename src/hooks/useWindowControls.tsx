@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
@@ -9,10 +10,12 @@ export function useWindowControls() {
   const appWindow = getCurrentWindow();
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
   const [updateAvailable, setUpdateAvailable] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
     isEnabled().then(setAutoStart).catch(() => {});
+    getVersion().then(setAppVersion).catch(() => {});
     void checkForUpdates({ silent: true });
   }, []);
 
@@ -59,6 +62,7 @@ export function useWindowControls() {
   async function checkForUpdates(options: { silent?: boolean } = {}) {
     try {
       const { check } = await import("@tauri-apps/plugin-updater");
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
       const { relaunch } = await import("@tauri-apps/plugin-process");
       const update = await check();
       if (update) {
@@ -66,7 +70,7 @@ export function useWindowControls() {
         setUpdateAvailable(updateInfo);
         toast.custom((t) => (
           <div className="glass-panel" style={{padding: "15px", display: "flex", gap: "15px", alignItems: "center"}}>
-            <span style={{fontSize: "20px"}}>Update</span>
+            <span style={{fontSize: "15px", fontWeight: 700, color: "var(--accent-cyan)"}}>Nova versão</span>
             <div>
               <b>Nova versão disponível!</b>
               <div style={{fontSize: "12px", color: "var(--text-muted)"}}>{updateInfo.version}</div>
@@ -80,6 +84,18 @@ export function useWindowControls() {
                 await relaunch();
               } catch(e) {
                 toast.error("Falha ao atualizar.", {id: installToast});
+                toast.custom((fallbackToast) => (
+                  <div className="glass-panel" style={{padding: "15px", display: "flex", gap: "15px", alignItems: "center"}}>
+                    <div>
+                      <b>Instalação automática falhou</b>
+                      <div style={{fontSize: "12px", color: "var(--text-muted)"}}>Baixe a versão mais recente pelo GitHub.</div>
+                    </div>
+                    <button className="btn btn-primary" onClick={async () => {
+                      toast.dismiss(fallbackToast.id);
+                      await openUrl("https://github.com/Rakjsu/Triumph/releases/latest");
+                    }}>Abrir Releases</button>
+                  </div>
+                ), {duration: 12000});
               }
             }}>Instalar</button>
           </div>
@@ -98,6 +114,7 @@ export function useWindowControls() {
   return {
     appWindow,
     autoStart,
+    appVersion,
     updateAvailable,
     showCloseDialog,
     setShowCloseDialog,
